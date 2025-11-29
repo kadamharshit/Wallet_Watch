@@ -38,9 +38,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       final username = usernameController.text.trim();
       final name = nameController.text.trim();
       final mobile = mobileController.text.trim();
-      final dob = dobController.text.trim();
+      final dob = dobController.text.trim(); // currently in dd/MM/yyyy
 
-      // ✅ Step 1: Check if username already exists in `users` table
+      // 1️⃣ Check if username already exists in `users` table
+      // 1️⃣ Check if username already exists in `users` table
       final existingUser = await supabase
           .from('users')
           .select()
@@ -55,7 +56,22 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         return;
       }
 
-      // ✅ Step 2: Create account using Supabase Auth
+      // 1️⃣.5 Check if email already exists in `users` table
+      final existingEmail = await supabase
+          .from('users')
+          .select()
+          .eq('email', email)
+          .maybeSingle();
+
+      if (existingEmail != null) {
+        setState(() {
+          _errorMessage = "An account with this email already exists.";
+        });
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 2️⃣ Create account using Supabase Auth
       final response = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -64,7 +80,24 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       if (response.user != null) {
         final userId = response.user!.id;
 
-        // ✅ Step 3: Insert extra user details into `users` table
+        // Optional: convert dob to YYYY-MM-DD to match EditProfilePage
+        String? dobIso;
+        if (dob.isNotEmpty) {
+          try {
+            // You currently set "day/month/year"
+            final parts = dob.split('/');
+            if (parts.length == 3) {
+              final day = parts[0].padLeft(2, '0');
+              final month = parts[1].padLeft(2, '0');
+              final year = parts[2];
+              dobIso = '$year-$month-$day'; // YYYY-MM-DD
+            }
+          } catch (_) {
+            dobIso = null;
+          }
+        }
+
+        // 3️⃣ Insert extra user details into `users` table
         await supabase.from('users').insert({
           'id': userId,
           'name': name,
@@ -72,14 +105,27 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           'email': email,
           'username': username,
           'password': password, // ⚠️ Plaintext for now; hash later
-          'dob': dob.isNotEmpty ? dob : null,
+          'dob': dobIso ?? (dob.isNotEmpty ? dob : null),
           'created_at': DateTime.now().toIso8601String(),
         });
 
-        // ✅ Step 4: Notify and redirect
+        // // 4️⃣ Insert into `profiles` table for EditProfilePage
+        // await supabase.from('profiles').insert({
+        //   'id': userId,
+        //   'name': name,
+        //   'mobile': mobile,
+        //   'email': email,
+        //   'dob': dobIso, // same format as EditProfilePage expects
+        // });
+
+        // 5️⃣ Notify and redirect
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Account created successfully!")),
+            const SnackBar(
+              content: Text(
+                "Account created successfully! Please Confirm From Email",
+              ),
+            ),
           );
           Navigator.pushReplacementNamed(context, '/login');
         }
@@ -93,6 +139,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         _errorMessage = error.message;
       });
     } catch (error) {
+      debugPrint('register error: $error');
       setState(() {
         _errorMessage = "Unexpected error. Please try again.";
       });

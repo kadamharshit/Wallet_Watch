@@ -213,20 +213,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ListTile(
                 leading: const Icon(Icons.person),
                 title: const Text("My Profile"),
-                onTap: () =>
-                    Navigator.pushReplacementNamed(context, '/profiles'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/profiles');
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.info),
                 title: const Text('About us'),
-                onTap: () => Navigator.pushNamed(context, '/about'),
+                onTap: () => Navigator.pushReplacementNamed(context, '/about'),
               ),
               ListTile(
                 leading: const Icon(Icons.wallet),
                 title: const Text("Expense Tracker"),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Navigator.pushNamed(context, '/expense_tracker');
+                  await Navigator.pushReplacementNamed(
+                    context,
+                    '/expense_tracker',
+                  );
                   _loadExpensesSeparately();
                 },
               ),
@@ -235,14 +240,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text("Manage Budget"),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Navigator.pushNamed(context, '/budget_tracker');
+                  await Navigator.pushReplacementNamed(
+                    context,
+                    '/budget_tracker',
+                  );
                   _loadBudgetsSeparately();
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.question_mark),
                 title: const Text("How To Use"),
-                onTap: () => Navigator.pushNamed(context, '/how_to_use'),
+                onTap: () =>
+                    Navigator.pushReplacementNamed(context, '/how_to_use'),
               ),
               ListTile(
                 leading: const Icon(Icons.logout),

@@ -17,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isPasswordVisible = false;
 
-  // Supabase client instance
   final supabase = Supabase.instance.client;
 
   Future<void> _login() async {
@@ -32,38 +31,50 @@ class _LoginScreenState extends State<LoginScreen> {
       final username = _usernameController.text.trim();
       final password = _passwordController.text.trim();
 
-      // ✅ Step 1: Find user record from `users` table by username
+      // 1️⃣ Find user record from `users` table by username
       final userRecord = await supabase
           .from('users')
           .select()
           .eq('username', username)
           .maybeSingle();
+
       if (userRecord == null) {
         setState(() {
           _errorMessage = "No account found with this username";
         });
       } else {
-        // ✅ Step 2: Validate password manually
-        if (userRecord['password'] == password) {
-          // ✅ Step 3: Navigate to home and optionally store user info
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Welcome ${userRecord['name']}!')),
+        final email = (userRecord['email'] as String).trim();
+
+        // 2️⃣ Use Supabase Auth with email + password
+        try {
+          final authRes = await supabase.auth.signInWithPassword(
+            email: email,
+            password: password,
           );
-          if (context.mounted) {
+
+          if (authRes.user != null) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Welcome ${userRecord['name']}!')),
+            );
             Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            setState(() {
+              _errorMessage = 'Incorrect email or password.';
+            });
           }
-        } else {
+        } on AuthException catch (e) {
           setState(() {
-            _errorMessage = 'Incorrect password.';
+            _errorMessage = e.message;
           });
         }
       }
     } catch (error) {
       setState(() {
-        _errorMessage = "Unexpected error occurred. Try Again.";
+        _errorMessage = "Unexpected error occurred. Try again.";
       });
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -87,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      "Login",
+                      "WalletWatch",
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -121,8 +132,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : Icons.visibility_off,
                           ),
                         ),
-                        prefixIcon: Icon(Icons.lock),
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock),
+                        border: const OutlineInputBorder(),
                       ),
                       obscureText: !_isPasswordVisible,
                       validator: (value) =>

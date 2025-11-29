@@ -5,9 +5,12 @@ import 'package:walletwatch/dashboard/splash_screen.dart';
 import 'package:walletwatch/features/auth/create_account_screen.dart';
 import 'package:walletwatch/features/auth/login_screen.dart';
 import 'package:walletwatch/features/budget/add_budget.dart';
+import 'package:walletwatch/features/settings/about_us.dart';
 import 'package:walletwatch/features/settings/budget_tracker.dart';
+import 'package:walletwatch/features/settings/edit_profile.dart';
 import 'package:walletwatch/features/settings/expense_tracker.dart';
 import 'package:walletwatch/features/settings/how_to_use.dart';
+//import 'package:walletwatch/features/settings/profiles.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +35,9 @@ class MyApp extends StatelessWidget {
         '/login': (_) => const LoginScreen(),
         '/register': (_) => const CreateAccountScreen(),
         '/home': (_) => const HomeScreen(),
-        '/expense_tracker': (_) => const ExpenseTracker(),
+        //'/expense_tracker': (_) => const ExpenseTracker(),
+        '/profiles': (_) => const EditProfilePage(),
+        '/about': (_) => const AboutUs(),
         '/budget_tracker': (_) => const BudgetTracker(),
         '/how_to_use': (_) => const HowToUse(),
         '/budget': (_) => const AddBudget(),
