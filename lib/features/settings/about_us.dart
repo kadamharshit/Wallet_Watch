@@ -8,7 +8,7 @@ class AboutUs extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          onPressed: () => Navigator.pushNamed(context, '/profiles'),
+          onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
         ),
         backgroundColor: Colors.blue,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'dart:collection';
 
@@ -57,7 +58,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     double online = 0.0;
 
     for (var entry in filtered) {
-      final amount = (entry['amount'] as num?)?.toDouble() ?? 0.0;
+      final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
       if (entry['mode'] == 'Cash') {
         cash += amount;
       } else {
@@ -100,7 +101,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
 
   Future<void> _showEditDialog(Map<String, dynamic> entry) async {
     final amountController = TextEditingController(
-      text: entry['amount'].toString(),
+      text: entry['total'].toString(),
     );
 
     await showDialog(
@@ -123,10 +124,18 @@ class _BudgetTrackerState extends State<BudgetTracker> {
               if (newAmount != null) {
                 await DatabaseHelper.instance.updateBudget(entry['id'], {
                   'date': entry['date'],
-                  'amount': newAmount,
+                  'total': newAmount,
                   'mode': entry['mode'],
                   'bank': entry['bank'] ?? '',
                 });
+                final supabaseId = entry['supabase_id'];
+                if (supabaseId != null) {
+                  final supabase = Supabase.instance.client;
+                  await supabase
+                      .from('budgets')
+                      .update({'total': newAmount})
+                      .eq('id', supabaseId);
+                }
                 Navigator.pop(context);
                 _loadBudgetsForMonth(_selectedMonth);
               }
@@ -241,7 +250,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                         color: Colors.green,
                       ),
                       title: Text(
-                        "₹${(item['amount'] as double).toStringAsFixed(2)}",
+                        "₹${(item['total'] as double).toStringAsFixed(2)}",
                       ),
                       subtitle: Text(
                         "Date: ${item['date']} • Mode: ${item['mode']}",
@@ -272,7 +281,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                           color: Colors.blue,
                         ),
                         title: Text(
-                          "₹${(item['amount'] as double).toStringAsFixed(2)}",
+                          "₹${(item['total'] as double).toStringAsFixed(2)}",
                         ),
                         subtitle: Text(
                           "Date: ${item['date']} • Mode: ${item['mode']} • Bank: ${item['bank'] ?? 'Unknown'}",

@@ -26,6 +26,8 @@ class DatabaseHelper {
       CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT NOT NULL,
+        supabase_id INTEGER,
+        uuid TEXT,
         shop TEXT,
         category TEXT,
         items TEXT,
@@ -40,8 +42,10 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE budget (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supabase_id INTEGER,
+        uuid TEXT,
         date TEXT,
-        amount REAL,
+        total Real,
         mode TEXT,
         bank TEXT,
         synced INTEGER DEFAULT 0

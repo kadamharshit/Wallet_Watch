@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:walletwatch/services/expense_database.dart'; // to check network status
+import 'package:uuid/uuid.dart';
 
 class AddManualExpense extends StatefulWidget {
   const AddManualExpense({super.key});
@@ -98,22 +99,53 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses();
     for (final exp in unsynced) {
       try {
-        await supabase.from('expenses').insert({
-          'user_id': user.id,
-          'date': exp['date'],
-          'shop': exp['shop'],
-          'category': exp['category'],
-          'items': exp['items'],
-          'total': exp['total'],
-          'mode': exp['mode'],
-          'bank': exp['bank']?.toString().isEmpty ?? true ? null : exp['bank'],
-          'created_at': DateTime.now().toIso8601String(),
+        final response = await supabase
+            .from('expenses')
+            .insert({
+              'uuid': exp['uuid'],
+              'user_id': user.id,
+              'date': exp['date'],
+              'shop': exp['shop'],
+              'category': exp['category'],
+              'items': exp['items'],
+              'total': exp['total'],
+              'mode': exp['mode'],
+              'bank': exp['bank']?.toString().isEmpty ?? true
+                  ? null
+                  : exp['bank'],
+              'created_at': DateTime.now().toIso8601String(),
+            })
+            .select('id')
+            .single();
+
+        final supabaseId = response['id'] as int;
+
+        await DatabaseHelper.instance.updateExpense(exp['id'], {
+          'supabase_id': supabaseId,
+          'synced': 1,
         });
-        await DatabaseHelper.instance.markExpenseAsSynced(exp['id']);
       } catch (e) {
         debugPrint('Sync error for expense ${exp['id']}: $e');
       }
     }
+  }
+
+  Future<double> _getRemainingBudgetForMode(String mode) async {
+    final now = DateTime.now();
+    final currentMonthPrefix = '${now.year.toString().padLeft(2, '0')}';
+    final allBudgets = await DatabaseHelper.instance.getBudget();
+
+    double remaining = 0.0;
+
+    for (final b in allBudgets) {
+      final dateStr = (b['date'] ?? '') as String;
+      if (!dateStr.startsWith(currentMonthPrefix)) continue;
+      if (b['mode'] != mode) continue;
+
+      final amount = (b['total'] as num?)?.toDouble() ?? 0.0;
+      remaining += amount;
+    }
+    return remaining;
   }
 
   Future<void> _saveExpense() async {
@@ -123,7 +155,49 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       final String date =
           _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
 
+      // final itemString = itemInputs
+      //     .map((item) => item.values.join(' | '))
+      //     .join('\n');
+
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("You must be logged in")));
+        return;
+      }
+
+      final remainingBudget = await _getRemainingBudgetForMode(
+        _selectedPaymentMode,
+      );
+
+      if (remainingBudget <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Warning: Your $_selectedPaymentMode budget for this month "
+              "is already used up (₹${remainingBudget.toStringAsFixed(2)}).",
+            ),
+          ),
+        );
+      } else if (total > remainingBudget) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Warning: This expense (₹${total.toStringAsFixed(2)}) exceeds your "
+              "remaining $_selectedPaymentMode budget of "
+              "₹${remainingBudget.toStringAsFixed(2)}.",
+            ),
+          ),
+        );
+      }
+      final newUuid = const Uuid().v4();
+
       final expense = {
+        'supabase_id': null,
+        'uuid': newUuid,
         'date': date,
         'shop': _shopController.text,
         'category': _selectedCategory,
@@ -131,57 +205,75 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         'total': total,
         'mode': _selectedPaymentMode,
         'bank': _selectedPaymentMode == 'Online' ? _selectedBank ?? '' : '',
-        'is_synced': 0, // mark as not synced yet
+        'synced': 0, // mark as not synced yet
       };
+      try {
+        // ✅ Save locally first
+        final expenseId = await DatabaseHelper.instance.insertExpense(expense);
 
-      // ✅ Save locally first
-      final expenseId = await DatabaseHelper.instance.insertExpense(expense);
+        // ✅ Deduct from local budget
+        final deduction = {
+          'supabase_id': null,
+          'uuid': const Uuid().v4(),
+          'date': date,
+          'total': -total,
+          'mode': _selectedPaymentMode,
+          if (_selectedPaymentMode == 'Online') 'bank': _selectedBank ?? '',
+        };
+        await DatabaseHelper.instance.insertBudget(deduction);
 
-      // ✅ Deduct from local budget
-      final deduction = {
-        'date': date,
-        'amount': -total,
-        'mode': _selectedPaymentMode,
-        if (_selectedPaymentMode == 'Online') 'bank': _selectedBank ?? '',
-      };
-      await DatabaseHelper.instance.insertBudget(deduction);
+        // ✅ Try uploading to Supabase if online
+        if (await _hasInternetConnection()) {
+          try {
+            final supabase = Supabase.instance.client;
+            final user = supabase.auth.currentUser;
 
-      // ✅ Try uploading to Supabase if online
-      if (await _hasInternetConnection()) {
-        try {
-          final supabase = Supabase.instance.client;
-          final user = supabase.auth.currentUser;
+            if (user != null) {
+              final response = await supabase
+                  .from('expenses')
+                  .insert({
+                    'uuid': newUuid,
+                    'user_id': user.id,
+                    'date': date,
+                    'shop': _shopController.text,
+                    'category': _selectedCategory,
+                    'items': itemInputs
+                        .map((item) => item.values.join(' | '))
+                        .join('\n'),
+                    'total': total,
+                    'mode': _selectedPaymentMode,
+                    'bank': _selectedPaymentMode == 'Online'
+                        ? _selectedBank ?? ''
+                        : null,
+                    'created_at': DateTime.now().toIso8601String(),
+                  })
+                  .select('id')
+                  .single();
 
-          if (user != null) {
-            await supabase.from('expenses').insert({
-              'user_id': user.id,
-              'date': date,
-              'shop': _shopController.text,
-              'category': _selectedCategory,
-              'items': itemInputs
-                  .map((item) => item.values.join(' | '))
-                  .join('\n'),
-              'total': total,
-              'mode': _selectedPaymentMode,
-              'bank': _selectedPaymentMode == 'Online'
-                  ? _selectedBank ?? ''
-                  : null,
-              'created_at': DateTime.now().toIso8601String(),
-            });
+              final supabaseId = response['id'] as int;
 
-            // mark as synced locally
-            await DatabaseHelper.instance.markExpenseAsSynced(expenseId);
+              // mark as synced locally
+              await DatabaseHelper.instance.updateExpense(expenseId, {
+                'supabase_id': supabaseId,
+                'synced': 1,
+              });
+            }
+          } catch (e) {
+            debugPrint('Supabase insert error: $e');
           }
-        } catch (e) {
-          debugPrint('Supabase insert error: $e');
         }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Expense Saved (Synced if online) ✅")),
+        );
+
+        Navigator.pushReplacementNamed(context, '/home');
+      } catch (e) {
+        debugPrint('Supabase/local error: $e');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error saving expense: $e")));
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Expense Saved (Synced if online) ✅")),
-      );
-
-      Navigator.pushReplacementNamed(context, '/home');
     }
   }
 

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:io';
+
+import 'package:walletwatch/services/expense_database.dart';
 
 class ExpenseTracker extends StatefulWidget {
   const ExpenseTracker({super.key});
@@ -10,124 +14,163 @@ class ExpenseTracker extends StatefulWidget {
 
 class _ExpenseTrackerState extends State<ExpenseTracker> {
   final supabase = Supabase.instance.client;
-
-  final _formKey = GlobalKey<FormState>();
-  final nameController = TextEditingController();
-  final mobileController = TextEditingController();
-  final emailController = TextEditingController();
-
-  bool _isLoading = false;
+  List<Map<String, dynamic>> _expenses = [];
+  bool _isLoading = true;
+  bool _isOnline = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _loadExpenses();
   }
 
-  Future<void> _loadUserProfile() async {
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      // Example: if you have a `profiles` table with name/mobile/email
-      final response = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .maybeSingle();
+  /// ✅ Checks internet connection
+  Future<bool> _checkConnection() async {
+    try {
+      final result = await InternetAddress.lookup('example.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
 
-      if (response != null) {
-        setState(() {
-          nameController.text = response['name'] ?? '';
-          mobileController.text = response['mobile'] ?? '';
-          emailController.text = response['email'] ?? '';
+  /// ✅ Load data from Supabase if online, else from local DB
+  Future<void> _loadExpenses() async {
+    setState(() => _isLoading = true);
+
+    _isOnline = await _checkConnection();
+    final user = supabase.auth.currentUser;
+
+    if (_isOnline && user != null) {
+      try {
+        // Fetch from Supabase
+        final response = await supabase
+            .from('expenses')
+            .select()
+            .eq('user_id', user.id)
+            .order('date', ascending: false);
+
+        _expenses = List<Map<String, dynamic>>.from(response);
+
+        // Store them locally for offline mode
+        for (var exp in _expenses) {
+          await DatabaseHelper.instance.insertExpense({
+            'date': exp['date'],
+            'shop': exp['shop'] ?? '',
+            'category': exp['category'] ?? '',
+            'items': exp['items'] ?? '',
+            'total': exp['total'] ?? 0,
+            'mode': exp['mode'] ?? 'Cash',
+            'bank': exp['bank'] ?? '',
+            'synced': 1,
+          });
+        }
+
+        await _syncLocalToSupabase();
+      } catch (e) {
+        debugPrint("Supabase fetch error: $e");
+        // fallback to local
+        _expenses = await DatabaseHelper.instance.getExpenses();
+      }
+    } else {
+      // offline mode
+      _expenses = await DatabaseHelper.instance.getExpenses();
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  /// ✅ Sync unsynced local data to Supabase
+  Future<void> _syncLocalToSupabase() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses();
+
+    for (var exp in unsynced) {
+      try {
+        await supabase.from('expenses').insert({
+          'user_id': user.id,
+          'date': exp['date'],
+          'shop': exp['shop'],
+          'category': exp['category'],
+          'items': exp['items'],
+          'total': exp['total'],
+          'mode': exp['mode'],
+          'bank': exp['bank'],
+          'created_at': DateTime.now().toIso8601String(),
         });
+        await DatabaseHelper.instance.markExpenseAsSynced(exp['id']);
+      } catch (e) {
+        debugPrint("Sync error: $e");
       }
     }
   }
 
-  Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+  /// ✅ Human readable date
+  String _formatDate(String date) {
+    final parsed = DateTime.tryParse(date);
+    if (parsed == null) return date;
 
-    setState(() => _isLoading = true);
+    final now = DateTime.now();
+    final diff = now.difference(parsed).inDays;
 
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      await supabase
-          .from('profiles')
-          .update({
-            'name': nameController.text.trim(),
-            'mobile': mobileController.text.trim(),
-            'email': emailController.text.trim(),
-          })
-          .eq('id', user.id);
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return DateFormat('dd MMM yyyy').format(parsed);
+  }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully!')),
-      );
+  /// ✅ UI for one expense card
+  Widget _buildExpenseCard(Map<String, dynamic> exp) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      child: ListTile(
+        title: Text(
+          exp['shop'] ?? 'Unknown Shop',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("${exp['category']} • ${exp['mode']}"),
+            Text("₹${exp['total']}"),
+            Text(_formatDate(exp['date'])),
+          ],
+        ),
+      ),
+    );
+  }
 
-      Navigator.pushReplacementNamed(context, '/profiles');
-    }
-
-    setState(() => _isLoading = false);
+  Future<void> _refreshExpenses() async {
+    await _loadExpenses();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // ✅ smart back navigation fix
-            if (Navigator.of(context).canPop()) {
-              Navigator.pop(context);
-            } else {
-              Navigator.pushReplacementNamed(context, '/profiles');
-            }
-          },
-        ),
+        title: const Text('Expense Tracker'),
+        actions: [
+          IconButton(
+            onPressed: _refreshExpenses,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Form(
-                key: _formKey,
-                child: ListView(
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(labelText: 'Name'),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Please enter your name' : null,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refreshExpenses,
+              child: _expenses.isEmpty
+                  ? const Center(child: Text("No expenses found"))
+                  : ListView.builder(
+                      itemCount: _expenses.length,
+                      itemBuilder: (context, index) =>
+                          _buildExpenseCard(_expenses[index]),
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: mobileController,
-                      decoration: const InputDecoration(labelText: 'Mobile'),
-                      validator: (value) => value!.isEmpty
-                          ? 'Please enter your mobile number'
-                          : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: emailController,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Please enter your email' : null,
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _updateProfile,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                      ),
-                      child: const Text('Save Changes'),
-                    ),
-                  ],
-                ),
-              ),
-      ),
+            ),
     );
   }
 }

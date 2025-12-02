@@ -8,11 +8,16 @@ class HowToUse extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('How To Use'),
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: Icon(Icons.arrow_back),
+        ),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: const Text(
-          '''
+        child: const Text('''
 📖 How to Use the Expense Tracker App
 
 🧾 1. Add an Expense
@@ -44,9 +49,7 @@ Use the "Sign Out" option in the drawer. You’ll be asked to confirm before log
 
 🙋 Need Help?
 For support or feedback, contact: harshit.expensetracker@gmail.com
-          ''',
-          style: TextStyle(fontSize: 16, height: 1.5),
-        ),
+          ''', style: TextStyle(fontSize: 16, height: 1.5)),
       ),
     );
   }

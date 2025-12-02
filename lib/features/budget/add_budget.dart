@@ -1,7 +1,8 @@
 import 'dart:io';
-
+import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -53,6 +54,7 @@ class _AddBudgetState extends State<AddBudget> {
   Future<void> _saveBudget() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
+    final newUuid = const Uuid().v4();
 
     if (user == null) {
       ScaffoldMessenger.of(
@@ -70,24 +72,38 @@ class _AddBudgetState extends State<AddBudget> {
         if (_formKey.currentState!.validate()) {
           final amount = double.tryParse(_cashAmountController.text) ?? 0.0;
           if (amount > 0) {
+            final newUuid = const Uuid().v4();
             final localData = {
+              'uuid': newUuid,
               'date': date,
               'mode': 'Cash',
               'total': amount,
               'bank': '',
-              'is_synced': 0,
+              'synced': 0,
+              'supabase_id': null,
             };
-            final id = await DatabaseHelper.instance.insertBudget(localData);
+            final localld = await DatabaseHelper.instance.insertBudget(
+              localData,
+            );
 
             if (await _hasInternetConnection()) {
-              await supabase.from('budgets').insert({
-                'user_id': user.id,
-                'date': date,
-                'mode': 'Cash',
-                'total': amount,
-                'category': null,
+              final response = await supabase
+                  .from('budgets')
+                  .insert({
+                    'uuid': newUuid,
+                    'user_id': user.id,
+                    'date': date,
+                    'mode': 'Cash',
+                    'total': amount,
+                    'category': null,
+                  })
+                  .select('id')
+                  .single();
+              final supabaseId = response['id'] as int;
+              await DatabaseHelper.instance.updateBudget(localld, {
+                'supabase_id': supabaseId,
+                'synced': 1,
               });
-              await DatabaseHelper.instance.markBudgetAsSynced(id);
             }
 
             entrySaved = true;
@@ -108,23 +124,37 @@ class _AddBudgetState extends State<AddBudget> {
           final amount = double.tryParse(bankInput['amount'].text) ?? 0.0;
           if (amount > 0) {
             final localData = {
+              'uuid': newUuid,
               'date': date,
               'mode': 'Online',
               'total': amount,
               'bank': bankName,
-              'is_synced': 0,
+              'synced': 0,
+              'supabase_id': null,
             };
-            final id = await DatabaseHelper.instance.insertBudget(localData);
+            final localId = await DatabaseHelper.instance.insertBudget(
+              localData,
+            );
 
             if (await _hasInternetConnection()) {
-              await supabase.from('budgets').insert({
-                'user_id': user.id,
-                'date': date,
-                'mode': 'Online',
-                'total': amount,
-                'category': bankName.isNotEmpty ? bankName : null,
+              final response = await supabase
+                  .from('budgets')
+                  .insert({
+                    'uuid': newUuid,
+                    'user_id': user.id,
+                    'date': date,
+                    'mode': 'Online',
+                    'total': amount,
+                    'category': bankName.isNotEmpty ? bankName : null,
+                  })
+                  .select('id')
+                  .single();
+
+              final supabaseId = response['id'] as int;
+              await DatabaseHelper.instance.updateBudget(localId, {
+                'supabase_id': supabaseId,
+                'synced': 1,
               });
-              await DatabaseHelper.instance.markBudgetAsSynced(id);
             }
 
             entrySaved = true;
@@ -159,20 +189,33 @@ class _AddBudgetState extends State<AddBudget> {
 
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
+    final newUuid = const Uuid().v4();
     if (user == null) return;
 
     final unsynced = await DatabaseHelper.instance.getUnsyncedBudgets();
     for (final b in unsynced) {
       try {
-        await supabase.from('budgets').insert({
-          'user_id': user.id,
-          'date': b['date'],
-          'mode': b['mode'],
-          'total': b['total'],
-          'category': b['bank']?.toString().isEmpty ?? true ? null : b['bank'],
-          'created_at': DateTime.now().toIso8601String(),
+        final response = await supabase
+            .from('budgets')
+            .insert({
+              'uuid': b['uuid'],
+              'user_id': user.id,
+              'date': b['date'],
+              'mode': b['mode'],
+              'total': b['total'],
+              'category': b['bank']?.toString().isEmpty ?? true
+                  ? null
+                  : b['bank'],
+              'created_at': DateTime.now().toIso8601String(),
+            })
+            .select('id')
+            .single();
+
+        final supabaseId = response['id'] as int;
+        await DatabaseHelper.instance.updateBudget(b['id'], {
+          'supabase_id': supabaseId,
+          'synced': 1,
         });
-        await DatabaseHelper.instance.markBudgetAsSynced(b['id']);
       } catch (e) {
         debugPrint('Budget sync error for ${b['id']}: $e');
       }

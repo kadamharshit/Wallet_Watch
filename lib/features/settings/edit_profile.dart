@@ -69,19 +69,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      await supabase.from('users').update({
-        'id': user.id,
-        'name': nameController.text.trim(),
-        'mobile': mobileController.text.trim(),
-        'email': emailController.text.trim(),
-        'dob': dobController.text.trim(),
-      });
+      await supabase
+          .from('users')
+          .update({
+            // 'id': user.id,
+            'name': nameController.text.trim(),
+            'mobile': mobileController.text.trim(),
+            'email': emailController.text.trim(),
+            'dob': dobController.text.trim(),
+          })
+          .eq('id', user.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
         );
-        Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('Error saving profile: $e');
@@ -97,11 +99,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: const Text('My Profile'),
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
         ),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
