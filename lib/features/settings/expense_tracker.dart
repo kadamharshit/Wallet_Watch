@@ -34,7 +34,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     }
   }
 
-  /// ✅ Load data from Supabase if online, else from local DB
+  ///  Load data from Supabase if online, else from local DB
   Future<void> _loadExpenses() async {
     setState(() => _isLoading = true);
 
