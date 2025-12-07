@@ -132,7 +132,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   Future<double> _getRemainingBudgetForMode(String mode) async {
     final now = DateTime.now();
-    final currentMonthPrefix = '${now.year.toString().padLeft(2, '0')}';
+    final currentMonthPrefix =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}';
     final allBudgets = await DatabaseHelper.instance.getBudget();
 
     double remaining = 0.0;
@@ -212,15 +213,15 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         final expenseId = await DatabaseHelper.instance.insertExpense(expense);
 
         // ✅ Deduct from local budget
-        final deduction = {
-          'supabase_id': null,
-          'uuid': const Uuid().v4(),
-          'date': date,
-          'total': -total,
-          'mode': _selectedPaymentMode,
-          if (_selectedPaymentMode == 'Online') 'bank': _selectedBank ?? '',
-        };
-        await DatabaseHelper.instance.insertBudget(deduction);
+        // final deduction = {
+        //   'supabase_id': null,
+        //   'uuid': const Uuid().v4(),
+        //   'date': date,
+        //   'total': -total,
+        //   'mode': _selectedPaymentMode,
+        //   if (_selectedPaymentMode == 'Online') 'bank': _selectedBank ?? '',
+        // };
+        //await DatabaseHelper.instance.insertBudget(deduction);
 
         // ✅ Try uploading to Supabase if online
         if (await _hasInternetConnection()) {
