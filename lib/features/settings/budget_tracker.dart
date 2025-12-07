@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'dart:collection';
@@ -147,7 +148,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  Future<void> _confirmDelete(int id) async {
+  Future<void> _confirmDelete(Map<String, dynamic> entry) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -167,8 +168,32 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
 
     if (confirmed == true) {
-      await DatabaseHelper.instance.deleteBudget(id);
-      _loadBudgetsForMonth(_selectedMonth);
+      final localId = entry['id'] as int;
+      final supabaseId = entry['supabase_id'];
+
+      try {
+        //1. delete from supabase if we know the remote id
+
+        if (supabaseId != null) {
+          final supabase = Supabase.instance.client;
+          await supabase.from('budgets').delete().eq('id', supabaseId);
+        }
+
+        //2. Delete from local SQLite
+        await DatabaseHelper.instance.deleteBudget(localId);
+
+        //3. Refresg List
+        _loadBudgetsForMonth(_selectedMonth);
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Budget entry deleted")));
+      } catch (e) {
+        debugPrint("Error deleting budget: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to delete Budget Entry")),
+        );
+      }
     }
   }
 
@@ -264,7 +289,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmDelete(item['id']),
+                            onPressed: () => _confirmDelete(item),
                           ),
                         ],
                       ),
@@ -298,7 +323,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmDelete(item['id']),
+                              onPressed: () => _confirmDelete(item),
                             ),
                           ],
                         ),
