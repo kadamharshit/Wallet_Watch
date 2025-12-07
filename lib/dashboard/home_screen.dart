@@ -19,6 +19,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final supabase = Supabase.instance.client;
 
+  //------------Derived values
+  double get _cashRemaining => _cashBudget - _cashExpense;
+  double get _onlineRemaining => _onlineBudget - _onlineExpense;
+  double get _totalRemaining => _cashRemaining - _onlineRemaining;
+
+  Color _amountColor(double value) =>
+      value >= 0 ? Colors.green : Colors.redAccent;
+
+  double get _cashProgress {
+    if (_cashBudget <= 0) return 0.0;
+    final ratio = _cashExpense / _cashBudget;
+    return ratio.clamp(0.0, 1.0);
+  }
+
+  double get _onlineProgress {
+    if (_onlineBudget <= 0) return 0.0;
+    final ratio = _onlineExpense / _onlineBudget;
+    return ratio.clamp(0.0, 1.0);
+  }
+
+  String _formatPercent(double used, double total) {
+    if (total <= 0) return "No budget set";
+    final percent = (used / total * 100).clamp(0, 999).toStringAsFixed(0);
+    return "$percent% of budget used";
+  }
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +184,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await _loadBudgetsSeparately();
+    await _loadExpensesSeparately();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,82 +196,100 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
         title: const Text("WalletWatch"),
+        actions: [
+          IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
+        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Card(
-              color: Colors.grey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              //----------- Total Remaining Card------------------
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  leading: const Icon(Icons.savings),
+                  title: Text("Total Remaining • ${currentMonthYear()}"),
+                  subtitle: Text(
+                    "₹ ${_totalRemaining.toStringAsFixed(2)}",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _amountColor(_totalRemaining),
+                    ),
+                  ),
+                ),
+              ),
+              //-------------------- Cash & Online Remaining -----------------
+              Row(
                 children: [
-                  Text(
-                    "EXPENSES",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Expanded(
+                    child: Card(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.money),
+                        title: const Text("Cash Remaining"),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "₹ ${_cashRemaining.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                color: _amountColor(_cashRemaining),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: _cashProgress, // 0.0 – 1.0
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatPercent(_cashExpense, _cashBudget),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                  Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: ListTile(
-                      title: Text("Cash Expense ${currentMonthYear()}"),
-                      subtitle: Text("₹ ${_cashExpense.toStringAsFixed(2)}"),
-                      leading: const Icon(Icons.money),
-                    ),
-                  ),
-                  Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: ListTile(
-                      title: Text("Online Expense ${currentMonthYear()}"),
-                      subtitle: Text("₹ ${_onlineExpense.toStringAsFixed(2)}"),
-                      leading: const Icon(Icons.account_balance_wallet),
+                  Expanded(
+                    child: Card(
+                      margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.account_balance_wallet),
+                        title: const Text("Online Remaining"),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "₹ ${_onlineRemaining.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                color: _amountColor(_onlineRemaining),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: _onlineProgress, // 0.0 – 1.0
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatPercent(_onlineExpense, _onlineBudget),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              color: Colors.blueGrey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    'BUDGET',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: ListTile(
-                      title: Text("Cash Budget ${currentMonthYear()}"),
-                      subtitle: Text("₹ ${_cashBudget.toStringAsFixed(2)}"),
-                      leading: const Icon(Icons.money),
-                    ),
-                  ),
-                  Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: ListTile(
-                      title: Text("Online Budget ${currentMonthYear()}"),
-                      subtitle: Text("₹ ${_onlineBudget.toStringAsFixed(2)}"),
-                      leading: const Icon(Icons.account_balance_wallet),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       drawer: Drawer(
