@@ -22,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   //------------Derived values
   double get _cashRemaining => _cashBudget - _cashExpense;
   double get _onlineRemaining => _onlineBudget - _onlineExpense;
-  double get _totalRemaining => _cashRemaining - _onlineRemaining;
+  double get _totalRemaining => _cashRemaining + _onlineRemaining;
 
   Color _amountColor(double value) =>
       value >= 0 ? Colors.green : Colors.redAccent;
@@ -202,94 +202,139 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _refreshAll,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              //----------- Total Remaining Card------------------
-              Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.savings),
-                  title: Text("Total Remaining • ${currentMonthYear()}"),
-                  subtitle: Text(
-                    "₹ ${_totalRemaining.toStringAsFixed(2)}",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: _amountColor(_totalRemaining),
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    //----------- Total Remaining Card------------------
+                    Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.savings),
+                        title: Text("Total Remaining • ${currentMonthYear()}"),
+                        subtitle: Text(
+                          "₹ ${_totalRemaining.toStringAsFixed(2)}",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _amountColor(_totalRemaining),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+
+                    //-------------------- Cash & Online Remaining -----------------
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Card(
+                            margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                            child: ListTile(
+                              leading: const Icon(Icons.money),
+                              title: const Text("Cash Remaining"),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "₹ ${_cashRemaining.toStringAsFixed(2)}",
+                                    style: TextStyle(
+                                      color: _amountColor(_cashRemaining),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  LinearProgressIndicator(value: _cashProgress),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatPercent(_cashExpense, _cashBudget),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Card(
+                            margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.account_balance_wallet_outlined,
+                              ),
+                              title: const Text("Online Remaining"),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "₹ ${_onlineRemaining.toStringAsFixed(2)}",
+                                    style: TextStyle(
+                                      color: _amountColor(_onlineRemaining),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  LinearProgressIndicator(
+                                    value: _onlineProgress,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatPercent(
+                                      _onlineExpense,
+                                      _onlineBudget,
+                                    ),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              //-------------------- Cash & Online Remaining -----------------
-              Row(
+            ),
+
+            // 🔥 Bottom Fixed Buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 350),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Card(
-                      margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.money),
-                        title: const Text("Cash Remaining"),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "₹ ${_cashRemaining.toStringAsFixed(2)}",
-                              style: TextStyle(
-                                color: _amountColor(_cashRemaining),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            LinearProgressIndicator(
-                              value: _cashProgress, // 0.0 – 1.0
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _formatPercent(_cashExpense, _cashBudget),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add Expense"),
+                      onPressed: () async {
+                        await Navigator.pushNamed(context, '/add_expense');
+                        _loadExpensesSeparately();
+                      },
                     ),
                   ),
-                  Expanded(
-                    child: Card(
-                      margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.account_balance_wallet),
-                        title: const Text("Online Remaining"),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "₹ ${_onlineRemaining.toStringAsFixed(2)}",
-                              style: TextStyle(
-                                color: _amountColor(_onlineRemaining),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            LinearProgressIndicator(
-                              value: _onlineProgress, // 0.0 – 1.0
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _formatPercent(_onlineExpense, _onlineBudget),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.account_balance_wallet),
+                      label: const Text("Add Budget"),
+                      onPressed: () async {
+                        await Navigator.pushNamed(context, '/budget');
+                        _loadBudgetsSeparately();
+                      },
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       drawer: Drawer(
@@ -399,46 +444,31 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            builder: (context) => SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.add),
-                      title: const Text('Add Expense'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await Navigator.pushNamed(context, '/add_expense');
-                        _loadExpensesSeparately();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.account_balance_wallet),
-                      title: const Text('Add Budget'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await Navigator.pushNamed(context, '/budget');
-                        _loadBudgetsSeparately();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
-      ),
+      // floatingActionButton: Column(
+      //   mainAxisSize: MainAxisSize.min,
+      //   crossAxisAlignment: CrossAxisAlignment.end,
+      //   children: [
+      //     FloatingActionButton.extended(
+      //       heroTag: 'fab_expense',
+      //       onPressed: () async {
+      //         await Navigator.pushNamed(context, '/add_expense');
+      //         _loadExpensesSeparately(); // refresh after coming back
+      //       },
+      //       icon: const Icon(Icons.add),
+      //       label: const Text('Add Expense'),
+      //     ),
+      //     const SizedBox(height: 12),
+      //     FloatingActionButton.extended(
+      //       heroTag: 'fab_budget',
+      //       onPressed: () async {
+      //         await Navigator.pushNamed(context, '/budget');
+      //         _loadBudgetsSeparately(); // refresh after coming back
+      //       },
+      //       icon: const Icon(Icons.account_balance_wallet),
+      //       label: const Text('Add Budget'),
+      //     ),
+      //   ],
+      // ),
     );
   }
 }
