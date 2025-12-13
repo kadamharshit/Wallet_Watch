@@ -13,7 +13,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final nameController = TextEditingController();
   final mobileController = TextEditingController();
   final emailController = TextEditingController();
-  final usernameController = TextEditingController();
+  //final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   final dobController = TextEditingController();
 
@@ -34,7 +34,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     try {
       final email = emailController.text.trim();
       final password = passwordController.text.trim();
-      final username = usernameController.text.trim();
+      //final username = usernameController.text.trim();
       final name = nameController.text.trim();
       final mobile = mobileController.text.trim();
       final dob = dobController.text.trim();
@@ -69,7 +69,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         'name': name,
         'mobile': mobile,
         'email': email,
-        'username': username,
+        //'username': username,
         'dob': dobIso,
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -191,14 +191,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       },
                     ),
                     const SizedBox(height: 10),
-                    TextFormField(
-                      controller: usernameController,
-                      decoration: _buildDecoration(
-                        label: "Username",
-                        icon: Icons.person_outline,
-                      ),
-                      validator: (v) => v!.isEmpty ? "Enter a username" : null,
-                    ),
+                    // TextFormField(
+                    //   controller: usernameController,
+                    //   decoration: _buildDecoration(
+                    //     label: "Username",
+                    //     icon: Icons.person_outline,
+                    //   ),
+                    //   validator: (v) => v!.isEmpty ? "Enter a username" : null,
+                    // ),
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: passwordController,
