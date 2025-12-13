@@ -66,6 +66,15 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  void _removeItem(int index) {
+    if (itemInputs.length == 1) return;
+
+    setState(() {
+      itemInputs.removeAt(index);
+      _updateTotal();
+    });
+  }
+
   void _updateTotal() {
     double sum = 0.0;
     for (var item in itemInputs) {
@@ -155,11 +164,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
       final String date =
           _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-      // final itemString = itemInputs
-      //     .map((item) => item.values.join(' | '))
-      //     .join('\n');
-
       final supabase = Supabase.instance.client;
       final user = supabase.auth.currentUser;
 
@@ -211,19 +215,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       try {
         // ✅ Save locally first
         final expenseId = await DatabaseHelper.instance.insertExpense(expense);
-
-        // ✅ Deduct from local budget
-        // final deduction = {
-        //   'supabase_id': null,
-        //   'uuid': const Uuid().v4(),
-        //   'date': date,
-        //   'total': -total,
-        //   'mode': _selectedPaymentMode,
-        //   if (_selectedPaymentMode == 'Online') 'bank': _selectedBank ?? '',
-        // };
-        //await DatabaseHelper.instance.insertBudget(deduction);
-
-        // ✅ Try uploading to Supabase if online
+        //  Try uploading to Supabase if online
         if (await _hasInternetConnection()) {
           try {
             final supabase = Supabase.instance.client;
@@ -298,6 +290,20 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Text(
+              'Item ${index + 1}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            if (itemInputs.length > 1)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => _removeItem(index),
+              ),
+          ],
+        ),
         if (_selectedCategory == 'Travel') ...[
           TextFormField(
             decoration: const InputDecoration(labelText: 'Mode'),
@@ -348,8 +354,18 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           validator: (val) =>
               val == null || val.isEmpty ? 'Enter amount' : null,
         ),
+        const SizedBox(height: 12),
         const Divider(thickness: 1),
       ],
+    );
+  }
+
+  //-----------------------UI UPDATE------------------------
+  Widget _sectionCard({required Widget child}) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
   }
 
@@ -357,10 +373,17 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Manual Expense'),
+        title: const Text('Add Expense'),
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
+        ),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: Colors.grey.shade200),
         ),
       ),
       body: Padding(
@@ -369,85 +392,161 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           key: _formKey,
           child: ListView(
             children: [
-              TextButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_month),
-                label: Text(_selectedDate ?? 'Select Date'),
-              ),
-              TextFormField(
-                controller: _shopController,
-                decoration: const InputDecoration(
-                  labelText: 'Shop Name / Type',
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Date & Shop Name",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: _pickDate,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Date',
+                          border: OutlineInputBorder(),
+                        ),
+                        child: Text(_selectedDate ?? 'Select date'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _shopController,
+                      decoration: const InputDecoration(
+                        labelText: 'Shop Name / Type',
+                      ),
+                      validator: (value) =>
+                          value!.isEmpty ? 'Enter shop name' : null,
+                    ),
+                  ],
                 ),
-                validator: (value) => value!.isEmpty ? 'Enter shop name' : null,
               ),
-              DropdownButtonFormField(
-                value: _selectedCategory,
-                items: _categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value!;
-                    itemInputs = [{}];
-                    total = 0.0;
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              DropdownButtonFormField(
-                value: _selectedPaymentMode,
-                items: _paymentModes
-                    .map(
-                      (mode) =>
-                          DropdownMenuItem(value: mode, child: Text(mode)),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedPaymentMode = value!;
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'Paid By'),
-              ),
-              if (_selectedPaymentMode == 'Online' &&
-                  _availableBanks.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  value: _selectedBank,
-                  items: _availableBanks
-                      .map(
-                        (bank) =>
-                            DropdownMenuItem(value: bank, child: Text(bank)),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedBank = val;
-                    });
-                  },
-                  decoration: const InputDecoration(labelText: 'Select Bank'),
-                ),
-              const SizedBox(height: 16),
-              const Text(
-                "Items",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ...List.generate(
-                itemInputs.length,
-                (index) => _buildItemFields(index),
-              ),
-              Text("Total: ₹${total.toStringAsFixed(2)}"),
               const SizedBox(height: 10),
-              ElevatedButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add),
-                label: const Text("Add Another Item"),
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Category & Payment",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    DropdownButtonFormField(
+                      value: _selectedCategory,
+                      items: _categories
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedCategory = value!;
+                          itemInputs = [{}];
+                          total = 0.0;
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Category'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField(
+                      value: _selectedPaymentMode,
+                      items: _paymentModes
+                          .map(
+                            (mode) => DropdownMenuItem(
+                              value: mode,
+                              child: Text(mode),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedPaymentMode = value!;
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Paid By'),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_selectedPaymentMode == 'Online' &&
+                        _availableBanks.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: _selectedBank,
+                        items: _availableBanks
+                            .map(
+                              (bank) => DropdownMenuItem(
+                                value: bank,
+                                child: Text(bank),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedBank = val;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Select Bank',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Items",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ...List.generate(
+                      itemInputs.length,
+                      (index) => _buildItemFields(index),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text('Total', style: TextStyle(fontSize: 16)),
+                          const Spacer(),
+                          Text(
+                            "₹${total.toStringAsFixed(2)}",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      onPressed: _addItem,
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add Another Item"),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _saveExpense,
-                child: const Text('Save Expense'),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _saveExpense,
+                  child: const Text(
+                    "Save Expense",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
             ],
           ),
