@@ -17,17 +17,16 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 2, onCreate: _createDB);
+    return await openDatabase(path, version: 3, onCreate: _createDB);
   }
 
-  Future _createDB(Database db, int version) async {
-    // Expenses table
+  Future<void> _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
+        uuid TEXT UNIQUE,
         supabase_id INTEGER,
-        uuid TEXT,
+        date TEXT NOT NULL,
         shop TEXT,
         category TEXT,
         items TEXT,
@@ -38,14 +37,13 @@ class DatabaseHelper {
       )
     ''');
 
-    // Budget table
     await db.execute('''
       CREATE TABLE budget (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT UNIQUE,
         supabase_id INTEGER,
-        uuid TEXT,
         date TEXT,
-        total Real,
+        total REAL,
         mode TEXT,
         bank TEXT,
         synced INTEGER DEFAULT 0
@@ -53,77 +51,88 @@ class DatabaseHelper {
     ''');
   }
 
-  // ====================== EXPENSES ======================
+  // ================= EXPENSES =================
 
   Future<int> insertExpense(Map<String, dynamic> expense) async {
-    final db = await instance.database;
-    return await db.insert('expenses', expense);
+    final db = await database;
+    return await db.insert(
+      'expenses',
+      expense,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
+  /// 🔁 UPSERT BY UUID (FIX FOR YOUR ERROR)
+  Future<void> upsertExpenseByUuid(Map<String, dynamic> expense) async {
+    final db = await database;
+
+    final existing = await db.query(
+      'expenses',
+      where: 'uuid = ?',
+      whereArgs: [expense['uuid']],
+    );
+
+    if (existing.isEmpty) {
+      await db.insert('expenses', expense);
+    } else {
+      await db.update(
+        'expenses',
+        expense,
+        where: 'uuid = ?',
+        whereArgs: [expense['uuid']],
+      );
+    }
+  }
+
+  /// ✅ NO ARGUMENT REQUIRED
   Future<List<Map<String, dynamic>>> getExpenses() async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query('expenses', orderBy: 'date DESC');
   }
 
   Future<List<Map<String, dynamic>>> getUnsyncedExpenses() async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query('expenses', where: 'synced = ?', whereArgs: [0]);
   }
 
-  Future<void> markExpenseAsSynced(int id) async {
-    final db = await instance.database;
-    await db.update(
-      'expenses',
-      {'synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  Future<void> updateExpense(int id, Map<String, dynamic> values) async {
+    final db = await database;
+    await db.update('expenses', values, where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<int> updateExpense(int id, Map<String, dynamic> values) async {
-    final db = await instance.database;
-    return await db.update(
-      'expenses',
-      values,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  Future<void> deleteExpense(int id) async {
+    final db = await database;
+    await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<int> deleteExpense(int id) async {
-    final db = await instance.database;
-    return await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // ====================== BUDGET ======================
+  // ================= BUDGET =================
 
   Future<int> insertBudget(Map<String, dynamic> budget) async {
-    final db = await instance.database;
-    return await db.insert('budget', budget);
+    final db = await database;
+    return await db.insert(
+      'budget',
+      budget,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getBudget() async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query('budget', orderBy: 'date DESC');
   }
 
   Future<List<Map<String, dynamic>>> getUnsyncedBudgets() async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query('budget', where: 'synced = ?', whereArgs: [0]);
   }
 
-  Future<void> markBudgetAsSynced(int id) async {
-    final db = await instance.database;
-    await db.update('budget', {'synced': 1}, where: 'id = ?', whereArgs: [id]);
+  Future<void> updateBudget(int id, Map<String, dynamic> values) async {
+    final db = await database;
+    await db.update('budget', values, where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<int> updateBudget(int id, Map<String, dynamic> values) async {
-    final db = await instance.database;
-    return await db.update('budget', values, where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<int> deleteBudget(int id) async {
-    final db = await instance.database;
-    return await db.delete('budget', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteBudget(int id) async {
+    final db = await database;
+    await db.delete('budget', where: 'id = ?', whereArgs: [id]);
   }
 }
