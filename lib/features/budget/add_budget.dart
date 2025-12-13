@@ -29,26 +29,24 @@ class _AddBudgetState extends State<AddBudget> {
   }
 
   void _addBankField() {
-    setState(() {
-      _bankInputs.add({
-        'bank': TextEditingController(),
-        'amount': TextEditingController(),
-        'amountKey': GlobalKey<FormFieldState>(),
-      });
+    _bankInputs.add({
+      'bank': TextEditingController(),
+      'amount': TextEditingController(),
+      'amountKey': GlobalKey<FormFieldState>(),
     });
+    setState(() {});
   }
 
   void _removeBankField(int index) {
     if (_bankInputs.length == 1) return;
-    setState(() {
-      _bankInputs.removeAt(index);
-    });
+    _bankInputs.removeAt(index);
+    setState(() {});
   }
 
   double get _onlineTotal {
     double sum = 0.0;
-    for (var bank in _bankInputs) {
-      sum += double.tryParse(bank['amount'].text) ?? 0.0;
+    for (var b in _bankInputs) {
+      sum += double.tryParse(b['amount'].text) ?? 0.0;
     }
     return sum;
   }
@@ -56,7 +54,7 @@ class _AddBudgetState extends State<AddBudget> {
   bool _hasDuplicateBanks() {
     final names = _bankInputs
         .map((b) => b['bank'].text.trim().toLowerCase())
-        .where((name) => name.isNotEmpty)
+        .where((e) => e.isNotEmpty)
         .toList();
     return names.length != names.toSet().length;
   }
@@ -69,9 +67,8 @@ class _AddBudgetState extends State<AddBudget> {
       lastDate: DateTime(2100),
     );
     if (picked != null) {
-      setState(() {
-        _selectedDate = DateFormat('yyyy-MM-dd').format(picked);
-      });
+      _selectedDate = DateFormat('yyyy-MM-dd').format(picked);
+      setState(() {});
     }
   }
 
@@ -79,16 +76,11 @@ class _AddBudgetState extends State<AddBudget> {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
 
-    if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("You must be logged in")));
-      return;
-    }
+    if (user == null) return;
 
     if (_mode == 'Online' && _hasDuplicateBanks()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Duplicate bank names are not allowed")),
+        const SnackBar(content: Text("Each bank name must be unique")),
       );
       return;
     }
@@ -96,7 +88,7 @@ class _AddBudgetState extends State<AddBudget> {
     final date =
         _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    bool entrySaved = false;
+    bool saved = false;
 
     try {
       if (_mode == 'Cash') {
@@ -108,6 +100,7 @@ class _AddBudgetState extends State<AddBudget> {
         final uuid = const Uuid().v4();
 
         final localId = await DatabaseHelper.instance.insertBudget({
+          //'user_id': user.id,
           'uuid': uuid,
           'date': date,
           'mode': 'Cash',
@@ -118,7 +111,7 @@ class _AddBudgetState extends State<AddBudget> {
         });
 
         if (await _hasInternetConnection()) {
-          final response = await supabase
+          final res = await supabase
               .from('budgets')
               .insert({
                 'uuid': uuid,
@@ -131,21 +124,17 @@ class _AddBudgetState extends State<AddBudget> {
               .single();
 
           await DatabaseHelper.instance.updateBudget(localId, {
-            'supabase_id': response['id'],
+            'supabase_id': res['id'],
             'synced': 1,
           });
         }
 
-        entrySaved = true;
+        saved = true;
       } else {
-        bool valid = true;
         for (var b in _bankInputs) {
           final key = b['amountKey'] as GlobalKey<FormFieldState>;
-          if (!(key.currentState?.validate() ?? false)) {
-            valid = false;
-          }
+          if (!(key.currentState?.validate() ?? false)) return;
         }
-        if (!valid) return;
 
         for (var b in _bankInputs) {
           final bankName = b['bank'].text.trim();
@@ -155,6 +144,7 @@ class _AddBudgetState extends State<AddBudget> {
           final uuid = const Uuid().v4();
 
           final localId = await DatabaseHelper.instance.insertBudget({
+            'user_id': user.id,
             'uuid': uuid,
             'date': date,
             'mode': 'Online',
@@ -165,7 +155,7 @@ class _AddBudgetState extends State<AddBudget> {
           });
 
           if (await _hasInternetConnection()) {
-            final response = await supabase
+            final res = await supabase
                 .from('budgets')
                 .insert({
                   'uuid': uuid,
@@ -173,30 +163,26 @@ class _AddBudgetState extends State<AddBudget> {
                   'date': date,
                   'mode': 'Online',
                   'total': amount,
-                  'category': bankName.isNotEmpty ? bankName : null,
+                  'bank': bankName,
                 })
                 .select('id')
                 .single();
 
             await DatabaseHelper.instance.updateBudget(localId, {
-              'supabase_id': response['id'],
+              'supabase_id': res['id'],
               'synced': 1,
             });
           }
 
-          entrySaved = true;
+          saved = true;
         }
       }
 
-      if (entrySaved) {
+      if (saved) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Budget saved successfully ✅")),
         );
         Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Enter at least one valid amount")),
-        );
       }
     } catch (e) {
       ScaffoldMessenger.of(
@@ -216,7 +202,7 @@ class _AddBudgetState extends State<AddBudget> {
 
     for (final b in unsynced) {
       try {
-        final response = await supabase
+        final res = await supabase
             .from('budgets')
             .insert({
               'uuid': b['uuid'],
@@ -224,13 +210,13 @@ class _AddBudgetState extends State<AddBudget> {
               'date': b['date'],
               'mode': b['mode'],
               'total': b['total'],
-              'category': b['bank'],
+              'bank': b['bank'],
             })
             .select('id')
             .single();
 
         await DatabaseHelper.instance.updateBudget(b['id'], {
-          'supabase_id': response['id'],
+          'supabase_id': res['id'],
           'synced': 1,
         });
       } catch (_) {}
@@ -239,8 +225,8 @@ class _AddBudgetState extends State<AddBudget> {
 
   Future<bool> _hasInternetConnection() async {
     try {
-      final result = await InternetAddress.lookup('example.com');
-      return result.isNotEmpty;
+      final res = await InternetAddress.lookup('example.com');
+      return res.isNotEmpty;
     } catch (_) {
       return false;
     }
@@ -283,11 +269,9 @@ class _AddBudgetState extends State<AddBudget> {
                 controller: c['amount'],
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Amount'),
-                validator: (val) {
-                  final amount = double.tryParse(val ?? '');
-                  if (amount == null || amount <= 0) {
-                    return 'Enter valid amount';
-                  }
+                validator: (v) {
+                  final amt = double.tryParse(v ?? '');
+                  if (amt == null || amt <= 0) return 'Enter valid amount';
                   return null;
                 },
                 onChanged: (_) => setState(() {}),
@@ -333,7 +317,7 @@ class _AddBudgetState extends State<AddBudget> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
+                    DropdownButtonFormField(
                       value: _mode,
                       items: const [
                         DropdownMenuItem(value: 'Cash', child: Text('Cash')),
@@ -351,23 +335,24 @@ class _AddBudgetState extends State<AddBudget> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (_mode == 'Cash')
-                _sectionCard(
-                  child: TextFormField(
-                    controller: _cashAmountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Cash Amount'),
-                    validator: (val) {
-                      final amount = double.tryParse(val ?? '');
-                      if (amount == null || amount <= 0) {
-                        return 'Enter valid amount';
-                      }
-                      return null;
-                    },
-                  ),
-                )
-              else
-                _sectionCard(child: _buildOnlineBankField()),
+              _mode == 'Cash'
+                  ? _sectionCard(
+                      child: TextFormField(
+                        controller: _cashAmountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Cash Amount',
+                        ),
+                        validator: (v) {
+                          final amt = double.tryParse(v ?? '');
+                          if (amt == null || amt <= 0) {
+                            return 'Enter valid amount';
+                          }
+                          return null;
+                        },
+                      ),
+                    )
+                  : _sectionCard(child: _buildOnlineBankField()),
               if (_mode == 'Online')
                 Container(
                   margin: const EdgeInsets.only(top: 12),
