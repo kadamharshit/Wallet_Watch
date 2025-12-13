@@ -569,6 +569,13 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
               spacing: 8,
               children: [
                 ChoiceChip(
+                  label: const Text("All"),
+                  selected: _filterMode == 'All',
+                  onSelected: (_) {
+                    setState(() => _filterMode = 'All');
+                  },
+                ),
+                ChoiceChip(
                   label: const Text("Cash"),
                   selected: _filterMode == 'Cash',
                   onSelected: (_) {
