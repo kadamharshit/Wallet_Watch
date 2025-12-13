@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -16,6 +17,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final mobileController = TextEditingController();
   final emailController = TextEditingController();
   final dobController = TextEditingController();
+
+  AutovalidateMode _autoValidate = AutovalidateMode.disabled;
 
   bool _isLoading = true;
 
@@ -61,7 +64,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _autoValidate = AutovalidateMode.onUserInteraction);
+      return;
+    }
 
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -75,7 +81,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
             // 'id': user.id,
             'name': nameController.text.trim(),
             'mobile': mobileController.text.trim(),
-            'email': emailController.text.trim(),
             'dob': dobController.text.trim(),
           })
           .eq('id', user.id);
@@ -92,6 +97,81 @@ class _EditProfilePageState extends State<EditProfilePage> {
       ).showSnackBar(const SnackBar(content: Text('Failed to update profile')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showChangePasswordDialog() async {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Change Password'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'New Password',
+            hintText: 'Minimum 8 characters',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.length < 8) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password too short')),
+                );
+                return;
+              }
+
+              await supabase.auth.updateUser(
+                UserAttributes(password: controller.text),
+              );
+
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Password updated successfully'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  //-----------------dob ----------------------
+  Future<void> _pickDob() async {
+    DateTime initialDate = DateTime.now().subtract(
+      const Duration(days: 365 * 18),
+    );
+
+    if (dobController.text.isNotEmpty) {
+      try {
+        initialDate = DateTime.parse(dobController.text);
+      } catch (_) {}
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        dobController.text = DateFormat('yyyy-MM-dd').format(picked);
+      });
     }
   }
 
@@ -113,6 +193,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
+                autovalidateMode: _autoValidate,
                 child: ListView(
                   children: [
                     _buildTextField(
@@ -128,43 +209,76 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       keyboardType: TextInputType.phone,
                       validator: (value) {
                         if (value!.isEmpty) return 'Enter your mobile number';
-                        if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) {
+                        if (!RegExp(r'^[0-9]{10}$').hasMatch(value.trim())) {
                           return 'Enter a valid 10-digit number';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      label: 'Email Address',
-                      controller: emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value!.isEmpty) return 'Enter your email';
-                        if (!RegExp(
-                          r'^[\w-\.]+@([\w-]+\.)+[\w]{2,4}$',
-                        ).hasMatch(value)) {
-                          return 'Enter a valid email';
-                        }
-                        return null;
-                      },
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.email, color: Colors.grey),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Email Address',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  emailController.text,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.lock_outline,
+                            size: 18,
+                            color: Colors.grey,
+                          ),
+                        ],
+                      ),
                     ),
+
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      label: 'Date of Birth',
-                      controller: dobController,
-                      hint: 'YYYY-MM-DD',
-                      keyboardType: TextInputType.datetime,
-                      validator: (value) {
-                        if (value!.isEmpty) return null; // Optional field
-                        if (!RegExp(
-                          r'^\d{4}-\d{2}-\d{2}$',
-                        ).hasMatch(value.trim())) {
-                          return 'Invalid date format';
-                        }
-                        return null;
-                      },
+                    InkWell(
+                      onTap: _pickDob,
+                      child: IgnorePointer(
+                        child: _buildTextField(
+                          label: 'Date of Birth',
+                          controller: dobController,
+                          readOnly: true,
+                          hint: 'YYYY-MM-DD',
+                          validator: (value) {
+                            if (value == null || value.isEmpty)
+                              return null; // optional
+                            return null;
+                          },
+                        ),
+                      ),
                     ),
+
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -176,8 +290,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
                         ),
-                        onPressed: _saveProfile,
+                        onPressed: _isLoading ? null : _saveProfile,
                       ),
+                    ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.lock_outline),
+                      label: const Text('Change Password'),
+                      onPressed: _showChangePasswordDialog,
                     ),
                   ],
                 ),
@@ -192,14 +311,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required TextEditingController controller,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    bool readOnly = false,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
+      readOnly: readOnly,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        suffixIcon: label == 'Date of Birth'
+            ? const Icon(Icons.calendar_today)
+            : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
