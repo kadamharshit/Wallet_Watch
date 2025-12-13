@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
-import 'package:walletwatch/services/expense_database.dart'; // to check network status
+import 'package:walletwatch/services/expense_database.dart';
 import 'package:uuid/uuid.dart';
 
 class AddManualExpense extends StatefulWidget {
@@ -20,7 +20,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   String _selectedCategory = 'Grocery';
   String _selectedPaymentMode = 'Cash';
 
-  List<Map<String, String>> itemInputs = [];
+  List<Map<String, String>> itemInputs = [{}];
   double total = 0.0;
 
   String? _selectedBank;
@@ -40,35 +40,45 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   @override
   void initState() {
     super.initState();
-    itemInputs.add({});
     _fetchAvailableBanks();
-    _syncPendingExpenses(); // try syncing any unsynced ones
+    _syncPendingExpenses();
   }
 
+  // ---------------- NETWORK ----------------
+  Future<bool> _hasInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup('example.com');
+      return result.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ---------------- BANKS ----------------
   Future<void> _fetchAvailableBanks() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
     final budgets = await DatabaseHelper.instance.getBudget();
+
     final banks = budgets
         .where((b) => b['mode'] == 'Online')
-        .map((b) => b['bank']?.toString() ?? '')
-        .where((name) => name.isNotEmpty)
+        .map((b) => (b['bank'] ?? '').toString())
+        .where((e) => e.isNotEmpty)
         .toSet()
         .toList();
 
     setState(() {
       _availableBanks = banks;
-      if (_availableBanks.isNotEmpty) _selectedBank = _availableBanks.first;
+      if (banks.isNotEmpty) _selectedBank = banks.first;
     });
   }
 
-  void _addItem() {
-    setState(() {
-      itemInputs.add({});
-    });
-  }
+  // ---------------- ITEMS ----------------
+  void _addItem() => setState(() => itemInputs.add({}));
 
   void _removeItem(int index) {
     if (itemInputs.length == 1) return;
-
     setState(() {
       itemInputs.removeAt(index);
       _updateTotal();
@@ -76,39 +86,26 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   void _updateTotal() {
-    double sum = 0.0;
-    for (var item in itemInputs) {
-      final amt = double.tryParse(item['amount'] ?? '0') ?? 0;
-      sum += amt;
-    }
-    setState(() {
-      total = sum;
-    });
+    total = itemInputs.fold(
+      0.0,
+      (sum, i) => sum + (double.tryParse(i['amount'] ?? '0') ?? 0),
+    );
+    setState(() {});
   }
 
-  /// ✅ Check if connected to the internet
-  Future<bool> _hasInternetConnection() async {
-    try {
-      final result = await InternetAddress.lookup('example.com');
-      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// ✅ Try syncing local unsynced expenses to Supabase
+  // ---------------- SYNC ----------------
   Future<void> _syncPendingExpenses() async {
-    final hasConnection = await _hasInternetConnection();
-    if (!hasConnection) return;
+    if (!await _hasInternetConnection()) return;
 
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
     final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses();
+
     for (final exp in unsynced) {
       try {
-        final response = await supabase
+        final res = await supabase
             .from('expenses')
             .insert({
               'uuid': exp['uuid'],
@@ -119,157 +116,98 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               'items': exp['items'],
               'total': exp['total'],
               'mode': exp['mode'],
-              'bank': exp['bank']?.toString().isEmpty ?? true
-                  ? null
-                  : exp['bank'],
-              'created_at': DateTime.now().toIso8601String(),
+              'bank': (exp['bank'] as String?)?.isNotEmpty == true
+                  ? exp['bank']
+                  : null,
             })
             .select('id')
             .single();
 
-        final supabaseId = response['id'] as int;
-
         await DatabaseHelper.instance.updateExpense(exp['id'], {
-          'supabase_id': supabaseId,
+          'supabase_id': res['id'],
+          'synced': 1,
+        });
+      } catch (_) {}
+    }
+  }
+
+  // ---------------- SAVE ----------------
+  Future<void> _saveExpense() async {
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
+
+    if (total <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Total must be greater than 0")),
+      );
+      return;
+    }
+
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final date =
+        _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    final uuid = const Uuid().v4();
+
+    /// ✅ LOCAL SQLITE OBJECT (NO user_id)
+    final localExpense = {
+      'uuid': uuid,
+      'date': date,
+      'shop': _shopController.text.trim(),
+      'category': _selectedCategory,
+      'items': itemInputs.map((i) => i.values.join(' | ')).join('\n'),
+      'total': total,
+      'mode': _selectedPaymentMode,
+      'bank': _selectedPaymentMode == 'Online' ? _selectedBank ?? '' : '',
+      'synced': 0,
+      'supabase_id': null,
+    };
+
+    // 1️⃣ SAVE LOCALLY (ALWAYS)
+    final localId = await DatabaseHelper.instance.insertExpense(localExpense);
+
+    // 2️⃣ TRY SUPABASE IF ONLINE
+    if (await _hasInternetConnection()) {
+      try {
+        final res = await supabase
+            .from('expenses')
+            .insert({
+              'uuid': uuid,
+              'user_id': user.id, // ✅ SUPABASE ONLY
+              'date': date,
+              'shop': localExpense['shop'],
+              'category': localExpense['category'],
+              'items': localExpense['items'],
+              'total': total,
+              'mode': localExpense['mode'],
+              'bank': localExpense['bank'].toString().isNotEmpty
+                  ? localExpense['bank']
+                  : null,
+            })
+            .select('id')
+            .single();
+
+        // mark synced
+        await DatabaseHelper.instance.updateExpense(localId, {
+          'supabase_id': res['id'],
           'synced': 1,
         });
       } catch (e) {
-        debugPrint('Sync error for expense ${exp['id']}: $e');
+        debugPrint("Supabase insert failed, saved offline: $e");
       }
     }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Expense saved ✅")));
+
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
-  Future<double> _getRemainingBudgetForMode(String mode) async {
-    final now = DateTime.now();
-    final currentMonthPrefix =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}';
-    final allBudgets = await DatabaseHelper.instance.getBudget();
-
-    double remaining = 0.0;
-
-    for (final b in allBudgets) {
-      final dateStr = (b['date'] ?? '') as String;
-      if (!dateStr.startsWith(currentMonthPrefix)) continue;
-      if (b['mode'] != mode) continue;
-
-      final amount = (b['total'] as num?)?.toDouble() ?? 0.0;
-      remaining += amount;
-    }
-    return remaining;
-  }
-
-  Future<void> _saveExpense() async {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-
-      final String date =
-          _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-
-      if (user == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("You must be logged in")));
-        return;
-      }
-
-      final remainingBudget = await _getRemainingBudgetForMode(
-        _selectedPaymentMode,
-      );
-
-      if (remainingBudget <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Warning: Your $_selectedPaymentMode budget for this month "
-              "is already used up (₹${remainingBudget.toStringAsFixed(2)}).",
-            ),
-          ),
-        );
-      } else if (total > remainingBudget) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Warning: This expense (₹${total.toStringAsFixed(2)}) exceeds your "
-              "remaining $_selectedPaymentMode budget of "
-              "₹${remainingBudget.toStringAsFixed(2)}.",
-            ),
-          ),
-        );
-      }
-      final newUuid = const Uuid().v4();
-
-      final expense = {
-        'supabase_id': null,
-        'uuid': newUuid,
-        'date': date,
-        'shop': _shopController.text,
-        'category': _selectedCategory,
-        'items': itemInputs.map((item) => item.values.join(' | ')).join('\n'),
-        'total': total,
-        'mode': _selectedPaymentMode,
-        'bank': _selectedPaymentMode == 'Online' ? _selectedBank ?? '' : '',
-        'synced': 0, // mark as not synced yet
-      };
-      try {
-        // ✅ Save locally first
-        final expenseId = await DatabaseHelper.instance.insertExpense(expense);
-        //  Try uploading to Supabase if online
-        if (await _hasInternetConnection()) {
-          try {
-            final supabase = Supabase.instance.client;
-            final user = supabase.auth.currentUser;
-
-            if (user != null) {
-              final response = await supabase
-                  .from('expenses')
-                  .insert({
-                    'uuid': newUuid,
-                    'user_id': user.id,
-                    'date': date,
-                    'shop': _shopController.text,
-                    'category': _selectedCategory,
-                    'items': itemInputs
-                        .map((item) => item.values.join(' | '))
-                        .join('\n'),
-                    'total': total,
-                    'mode': _selectedPaymentMode,
-                    'bank': _selectedPaymentMode == 'Online'
-                        ? _selectedBank ?? ''
-                        : null,
-                    'created_at': DateTime.now().toIso8601String(),
-                  })
-                  .select('id')
-                  .single();
-
-              final supabaseId = response['id'] as int;
-
-              // mark as synced locally
-              await DatabaseHelper.instance.updateExpense(expenseId, {
-                'supabase_id': supabaseId,
-                'synced': 1,
-              });
-            }
-          } catch (e) {
-            debugPrint('Supabase insert error: $e');
-          }
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Expense Saved (Synced if online) ✅")),
-        );
-
-        Navigator.pushReplacementNamed(context, '/home');
-      } catch (e) {
-        debugPrint('Supabase/local error: $e');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error saving expense: $e")));
-      }
-    }
-  }
-
+  // ---------------- DATE ----------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -283,6 +221,13 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       });
     }
   }
+
+  // ---------------- UI HELPERS ----------------
+  Widget _sectionCard({required Widget child}) => Card(
+    elevation: 1,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    child: Padding(padding: const EdgeInsets.all(16), child: child),
+  );
 
   Widget _buildItemFields(int index) {
     final item = itemInputs[index];
@@ -304,71 +249,70 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ),
           ],
         ),
+
+        // Travel-specific fields
         if (_selectedCategory == 'Travel') ...[
           TextFormField(
             decoration: const InputDecoration(labelText: 'Mode'),
-            onSaved: (val) => item['mode'] = val ?? '',
             initialValue: item['mode'],
+            onSaved: (val) => item['mode'] = val ?? '',
             validator: (val) =>
-                val == null || val.isEmpty ? 'Enter mode' : null,
+                val == null || val.isEmpty ? 'Enter travel mode' : null,
           ),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Start'),
-            onSaved: (val) => item['start'] = val ?? '',
             initialValue: item['start'],
+            onSaved: (val) => item['start'] = val ?? '',
             validator: (val) =>
-                val == null || val.isEmpty ? 'Enter start' : null,
+                val == null || val.isEmpty ? 'Enter start point' : null,
           ),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Destination'),
-            onSaved: (val) => item['destination'] = val ?? '',
             initialValue: item['destination'],
+            onSaved: (val) => item['destination'] = val ?? '',
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter destination' : null,
           ),
-        ] else ...[
+        ]
+        // Other categories
+        else ...[
           TextFormField(
             decoration: const InputDecoration(labelText: 'Item Name'),
-            onSaved: (val) => item['name'] = val ?? '',
             initialValue: item['name'],
+            onSaved: (val) => item['name'] = val ?? '',
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter item name' : null,
           ),
           TextFormField(
             decoration: const InputDecoration(labelText: 'Quantity'),
-            onSaved: (val) => item['qty'] = val ?? '',
             initialValue: item['qty'],
+            onSaved: (val) => item['qty'] = val ?? '',
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter quantity' : null,
           ),
         ],
+
+        // Amount (common)
         TextFormField(
           decoration: const InputDecoration(labelText: 'Amount'),
           keyboardType: TextInputType.number,
+          initialValue: item['amount'],
           onChanged: (val) {
             item['amount'] = val;
             _updateTotal();
           },
           onSaved: (val) => item['amount'] = val ?? '0',
-          initialValue: item['amount'],
           validator: (val) =>
               val == null || val.isEmpty ? 'Enter amount' : null,
         ),
+
         const SizedBox(height: 12),
         const Divider(thickness: 1),
       ],
     );
   }
 
-  //-----------------------UI UPDATE------------------------
-  Widget _sectionCard({required Widget child}) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
-    );
-  }
-
+  // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
