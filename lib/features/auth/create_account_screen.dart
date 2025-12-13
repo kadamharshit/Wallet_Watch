@@ -19,7 +19,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   bool _isLoading = false;
   String? _errorMessage;
-
   bool _isPasswordVisible = false;
 
   final supabase = Supabase.instance.client;
@@ -38,119 +37,64 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       final username = usernameController.text.trim();
       final name = nameController.text.trim();
       final mobile = mobileController.text.trim();
-      final dob = dobController.text.trim(); // currently in dd/MM/yyyy
+      final dob = dobController.text.trim();
 
-      // 1️⃣ Check if username already exists in `users` table
-      // 1️⃣ Check if username already exists in `users` table
-      final existingUser = await supabase
-          .from('users')
-          .select()
-          .eq('username', username)
-          .maybeSingle();
-
-      if (existingUser != null) {
-        setState(() {
-          _errorMessage = "Username already exists. Try another.";
-        });
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // 1️⃣.5 Check if email already exists in `users` table
-      final existingEmail = await supabase
-          .from('users')
-          .select()
-          .eq('email', email)
-          .maybeSingle();
-
-      if (existingEmail != null) {
-        setState(() {
-          _errorMessage = "An account with this email already exists.";
-        });
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // 2️⃣ Create account using Supabase Auth
-      final response = await supabase.auth.signUp(
+      // 1️⃣ Create account using Supabase Auth
+      final authResponse = await supabase.auth.signUp(
         email: email,
         password: password,
       );
 
-      if (response.user != null) {
-        final userId = response.user!.id;
-
-        // Optional: convert dob to YYYY-MM-DD to match EditProfilePage
-        String? dobIso;
-        if (dob.isNotEmpty) {
-          try {
-            // You currently set "day/month/year"
-            final parts = dob.split('/');
-            if (parts.length == 3) {
-              final day = parts[0].padLeft(2, '0');
-              final month = parts[1].padLeft(2, '0');
-              final year = parts[2];
-              dobIso = '$year-$month-$day'; // YYYY-MM-DD
-            }
-          } catch (_) {
-            dobIso = null;
-          }
-        }
-
-        // 3️⃣ Insert extra user details into `users` table
-        await supabase.from('users').insert({
-          'id': userId,
-          'name': name,
-          'mobile': mobile,
-          'email': email,
-          'username': username,
-          'password': password, // ⚠️ Plaintext for now; hash later
-          'dob': dobIso ?? (dob.isNotEmpty ? dob : null),
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        // // 4️⃣ Insert into `profiles` table for EditProfilePage
-        // await supabase.from('profiles').insert({
-        //   'id': userId,
-        //   'name': name,
-        //   'mobile': mobile,
-        //   'email': email,
-        //   'dob': dobIso, // same format as EditProfilePage expects
-        // });
-
-        // 5️⃣ Notify and redirect
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Account created successfully! Please Confirm From Email",
-              ),
-            ),
-          );
-          Navigator.pushReplacementNamed(context, '/login');
-        }
-      } else {
-        setState(() {
-          _errorMessage = "Could not create account. Try again.";
-        });
+      final user = authResponse.user;
+      if (user == null) {
+        setState(() => _errorMessage = "Account creation failed.");
+        return;
       }
-    } on AuthException catch (error) {
-      setState(() {
-        _errorMessage = error.message;
+
+      // Convert DOB to YYYY-MM-DD
+      String? dobIso;
+      if (dob.isNotEmpty) {
+        try {
+          final parts = dob.split('/');
+          if (parts.length == 3) {
+            dobIso =
+                '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+          }
+        } catch (_) {}
+      }
+
+      // 2️⃣ Insert user profile AFTER successful signup
+      await supabase.from('users').insert({
+        'id': user.id,
+        'name': name,
+        'mobile': mobile,
+        'email': email,
+        'username': username,
+        'dob': dobIso,
+        'created_at': DateTime.now().toIso8601String(),
       });
-    } catch (error) {
-      debugPrint('register error: $error');
-      setState(() {
-        _errorMessage = "Unexpected error. Please try again.";
-      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Account created! Please confirm your email before login.",
+          ),
+        ),
+      );
+
+      Navigator.pushReplacementNamed(context, '/login');
+    } on AuthException catch (e) {
+      setState(() => _errorMessage = e.message);
+    } catch (e) {
+      debugPrint("Register error: $e");
+      setState(() => _errorMessage = "Something went wrong. Try again.");
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 🔲 Input decoration with black border
   InputDecoration _buildDecoration({
     required String label,
     required IconData icon,
@@ -217,8 +161,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         label: "Name",
                         icon: Icons.person,
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? "Enter your name" : null,
+                      validator: (v) => v!.isEmpty ? "Enter your name" : null,
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -228,8 +171,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         icon: Icons.phone,
                       ),
                       keyboardType: TextInputType.phone,
-                      validator: (value) =>
-                          value!.isEmpty ? "Enter your mobile number" : null,
+                      validator: (v) =>
+                          v!.isEmpty ? "Enter your mobile number" : null,
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -239,11 +182,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         icon: Icons.email_outlined,
                       ),
                       keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return "Enter your email";
-                        }
-                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return "Enter your email";
+                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
                           return "Enter a valid email";
                         }
                         return null;
@@ -256,8 +197,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         label: "Username",
                         icon: Icons.person_outline,
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? "Enter a username" : null,
+                      validator: (v) => v!.isEmpty ? "Enter a username" : null,
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -271,7 +211,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             _isPasswordVisible
                                 ? Icons.visibility
                                 : Icons.visibility_off,
-                            color: Colors.black54,
                           ),
                           onPressed: () {
                             setState(() {
@@ -280,15 +219,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           },
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
                           return "Enter a password";
-                        } else if (value.length < 7) {
-                          return "Password must be at least 7 characters";
-                        } else if (!RegExp(
-                          r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$',
-                        ).hasMatch(value)) {
-                          return "Password must contain letters and numbers";
+                        }
+                        if (v.length < 7) {
+                          return "At least 7 characters required";
+                        }
+                        if (!RegExp(r'^(?=.*[A-Za-z])(?=.*\d)').hasMatch(v)) {
+                          return "Must contain letters and numbers";
                         }
                         return null;
                       },
@@ -302,10 +241,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         label: "Date of Birth (optional)",
                         icon: Icons.calendar_today,
                         suffixIcon: IconButton(
-                          icon: const Icon(
-                            Icons.edit_calendar_outlined,
-                            color: Colors.black54,
-                          ),
+                          icon: const Icon(Icons.edit_calendar_outlined),
                           onPressed: _pickDate,
                         ),
                       ),
