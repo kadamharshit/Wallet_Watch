@@ -7,49 +7,171 @@ class HowToUse extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('How To Use'),
+        title: const Text('How to Use'),
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
-          icon: Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back),
         ),
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: const Text('''
-📖 How to Use the Expense Tracker App
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // -------- Header --------
+            Center(
+              child: Column(
+                children: const [
+                  Icon(Icons.help_outline, size: 56, color: Colors.blue),
+                  SizedBox(height: 10),
+                  Text(
+                    "How to Use WalletWatch",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    "A quick guide to manage your expenses",
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
 
-🧾 1. Add an Expense
-You can track your spending in two ways:
-• Add Manually: Enter the date, shop name, category, items (name, quantity, amount), and how you paid (Cash or Online).
-• Add via Receipt: Upload or capture an image of a bill and the app will extract key details automatically using OCR.
+            const SizedBox(height: 24),
 
-💰 2. Manage Your Budget
-Go to "Manage Budget" from the drawer:
-• Cash: Enter cash-in-hand amount.
-• Online: Add money available in different bank or UPI accounts.
+            // -------- Steps --------
+            _stepCard(
+              icon: Icons.add_circle_outline,
+              title: "Add an Expense",
+              content:
+                  "You can track your spending in two ways:\n\n"
+                  "• Add Manually: Enter date, shop name, category, items, and payment mode.\n"
+                  "• Receipt Scan: Capture or upload a bill to auto-extract details (Coming soon).",
+            ),
 
-🔄 3. Auto-Budget Deduction
-When you add an expense, the app checks how it was paid and reduces the corresponding (Cash or Online) budget.
+            _stepCard(
+              icon: Icons.account_balance_wallet_outlined,
+              title: "Manage Your Budget",
+              content:
+                  "Go to Manage Budget from the drawer:\n\n"
+                  "• Cash: Enter available cash amount.\n"
+                  "• Online: Add balances from bank or UPI accounts.",
+            ),
 
-📊 4. View Dashboard
-Home screen shows:
-• Total Expense for the current month
-• Total Budget available (Cash + Online combined)
+            _stepCard(
+              icon: Icons.sync_alt,
+              title: "Auto Budget Deduction",
+              content:
+                  "Whenever you add an expense, the app automatically deducts the amount "
+                  "from Cash or Online budget based on the payment mode.",
+            ),
 
-🧍‍♂️ 5. My Profile
-View and edit your name, mobile number, and email from the "My Profile" page in the drawer.
+            _stepCard(
+              icon: Icons.dashboard_outlined,
+              title: "View Dashboard",
+              content:
+                  "The dashboard shows:\n\n"
+                  "• Total expenses for the current month\n"
+                  "• Total available budget (Cash + Online)",
+            ),
 
-🔐 6. Login and Security
-Your credentials are securely stored. Once logged in, you stay signed in unless you sign out.
+            _stepCard(
+              icon: Icons.person_outline,
+              title: "My Profile",
+              content:
+                  "View and edit your personal details like name, mobile number, "
+                  "and date of birth from the My Profile page.",
+            ),
 
-📤 7. Sign Out
-Use the "Sign Out" option in the drawer. You’ll be asked to confirm before logging out.
+            _stepCard(
+              icon: Icons.lock_outline,
+              title: "Login & Security",
+              content:
+                  "Your login details are securely stored. "
+                  "Once logged in, you remain signed in until you choose to sign out.",
+            ),
 
-🙋 Need Help?
-For support or feedback, contact: harshit.expensetracker@gmail.com
-          ''', style: TextStyle(fontSize: 16, height: 1.5)),
+            _stepCard(
+              icon: Icons.logout,
+              title: "Sign Out",
+              content:
+                  "Use the Sign Out option from the drawer. "
+                  "You will be asked to confirm before logging out.",
+            ),
+
+            const SizedBox(height: 24),
+
+            // -------- Support --------
+            const Text(
+              "Need Help?",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+
+            Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const ListTile(
+                leading: Icon(Icons.email, color: Colors.blue),
+                title: Text("Contact Support"),
+                subtitle: Text("harshit.expensetracker@gmail.com"),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            Center(
+              child: Text(
+                "Simple. Secure. Smart.",
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // -------- Reusable Step Card --------
+  static Widget _stepCard({
+    required IconData icon,
+    required String title,
+    required String content,
+  }) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: Colors.blue),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(content, style: const TextStyle(fontSize: 15, height: 1.6)),
+          ],
+        ),
       ),
     );
   }
