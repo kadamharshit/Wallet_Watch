@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final supabase = Supabase.instance.client;
 
-  //------------Derived values
+  // Derived values
   double get _cashRemaining => _cashBudget - _cashExpense;
   double get _onlineRemaining => _onlineBudget - _onlineExpense;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
@@ -27,17 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Color _amountColor(double value) =>
       value >= 0 ? Colors.green : Colors.redAccent;
 
-  double get _cashProgress {
-    if (_cashBudget <= 0) return 0.0;
-    final ratio = _cashExpense / _cashBudget;
-    return ratio.clamp(0.0, 1.0);
-  }
+  double get _cashProgress =>
+      _cashBudget <= 0 ? 0.0 : (_cashExpense / _cashBudget).clamp(0.0, 1.0);
 
-  double get _onlineProgress {
-    if (_onlineBudget <= 0) return 0.0;
-    final ratio = _onlineExpense / _onlineBudget;
-    return ratio.clamp(0.0, 1.0);
-  }
+  double get _onlineProgress => _onlineBudget <= 0
+      ? 0.0
+      : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
 
   String _formatPercent(double used, double total) {
     if (total <= 0) return "No budget set";
@@ -57,7 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    // Fetch user details from 'users' table
     final response = await supabase
         .from('users')
         .select()
@@ -67,9 +62,81 @@ class _HomeScreenState extends State<HomeScreen> {
     if (response != null) {
       setState(() {
         _username = response['name'] ?? 'User';
-        _useremail = response['email'] ?? 'example@gmail.com';
+        _useremail = response['email'] ?? '';
       });
     }
+  }
+
+  //------------------Pie Chart----------------------------
+  Widget _buildExpensePieChart() {
+    final total = _cashExpense + _onlineExpense;
+
+    if (total <= 0) {
+      return const Center(
+        child: Text(
+          "No Expense data for this month",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 220,
+      child: PieChart(
+        PieChartData(
+          sectionsSpace: 2,
+          centerSpaceRadius: 50,
+          sections: [
+            PieChartSectionData(
+              value: _cashExpense,
+              color: Colors.green,
+              radius: 50,
+              title: "${((_cashExpense / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Colors.white,
+              ),
+            ),
+            PieChartSectionData(
+              value: _onlineExpense,
+              color: Colors.blue,
+              radius: 50,
+              title: "${((_onlineExpense / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPieLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _legendItem(Colors.green, "Cash"),
+        const SizedBox(width: 16),
+        _legendItem(Colors.blue, "Online"),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
   }
 
   Future<void> _loadExpensesSeparately() async {
@@ -91,18 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final date = item['date']?.toString();
       if (date != null && date.startsWith(currentMonth)) {
         final amount = (item['total'] as num).toDouble();
-        final modeRaw = (item['mode'] ?? 'Cash')
-            .toString()
-            .trim()
-            .toLowerCase();
-
-        if (modeRaw == 'cash') {
-          cash += amount;
-        } else if (modeRaw == 'online') {
-          online += amount;
-        } else {
-          cash += amount;
-        }
+        final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
+        mode == 'online' ? online += amount : cash += amount;
       }
     }
 
@@ -127,12 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final entry in response) {
       final mode = (entry['mode'] ?? 'Cash').toString();
       final amount = (entry['total'] as num).toDouble();
-
-      if (mode == 'Cash') {
-        cash += amount;
-      } else if (mode == 'Online') {
-        online += amount;
-      }
+      mode == 'Online' ? online += amount : cash += amount;
     }
 
     setState(() {
@@ -141,26 +193,25 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  String currentMonthYear() => DateFormat("MMMM yyyy").format(DateTime.now());
+
   String getInitials(String name) {
     if (name.trim().isEmpty) return "";
-
-    List<String> parts = name.trim().split(" ");
-
-    if (parts.length == 1) {
-      return parts[0][0].toUpperCase();
-    }
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+    final parts = name.trim().split(" ");
+    return parts.length == 1
+        ? parts[0][0].toUpperCase()
+        : (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
-  String currentMonthYear() {
-    final now = DateTime.now();
-    return DateFormat("MMMM yyyy").format(now);
+  Future<void> _refreshAll() async {
+    await _loadBudgetsSeparately();
+    await _loadExpensesSeparately();
   }
 
   Future<void> _logout() async {
-    final shouldlogout = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text("Confirm Logout"),
         content: const Text("Are you sure you want to sign out?"),
         actions: [
@@ -176,7 +227,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (shouldlogout == true) {
+
+    if (confirm == true) {
       await supabase.auth.signOut();
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
@@ -184,22 +236,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _refreshAll() async {
-    await _loadBudgetsSeparately();
-    await _loadExpensesSeparately();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        foregroundColor: Colors.white,
-        backgroundColor: Colors.blue,
         title: const Text("WalletWatch"),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
         ],
       ),
+
       body: RefreshIndicator(
         onRefresh: _refreshAll,
         child: Column(
@@ -210,15 +258,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     const SizedBox(height: 12),
-                    //----------- Total Remaining Card------------------
+
+                    // Total Remaining
                     Card(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
                       ),
                       child: ListTile(
-                        leading: const Icon(Icons.savings),
-                        title: Text("Total Remaining • ${currentMonthYear()}"),
+                        leading: const Icon(Icons.savings, size: 32),
+                        title: Text(
+                          "Total Remaining • ${currentMonthYear()}",
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         subtitle: Text(
                           "₹ ${_totalRemaining.toStringAsFixed(2)}",
                           style: TextStyle(
@@ -229,72 +281,61 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                    Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Expense Breakdown",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildExpensePieChart(),
+                            const SizedBox(height: 12),
+                            _buildPieLegend(),
+                          ],
+                        ),
+                      ),
+                    ),
 
-                    //-------------------- Cash & Online Remaining -----------------
                     Row(
                       children: [
-                        Expanded(
-                          child: Card(
-                            margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                            child: ListTile(
-                              leading: const Icon(Icons.money),
-                              title: const Text("Cash Remaining"),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "₹ ${_cashRemaining.toStringAsFixed(2)}",
-                                    style: TextStyle(
-                                      color: _amountColor(_cashRemaining),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(value: _cashProgress),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _formatPercent(_cashExpense, _cashBudget),
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        _buildRemainingCard(
+                          title: "Cash Remaining",
+                          icon: Icons.money,
+                          amount: _cashRemaining,
+                          progress: _cashProgress,
+                          percentText: _formatPercent(
+                            _cashExpense,
+                            _cashBudget,
                           ),
+                          color: Colors.green,
+                          margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                         ),
-                        Expanded(
-                          child: Card(
-                            margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-                            child: ListTile(
-                              leading: const Icon(
-                                Icons.account_balance_wallet_outlined,
-                              ),
-                              title: const Text("Online Remaining"),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "₹ ${_onlineRemaining.toStringAsFixed(2)}",
-                                    style: TextStyle(
-                                      color: _amountColor(_onlineRemaining),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(
-                                    value: _onlineProgress,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _formatPercent(
-                                      _onlineExpense,
-                                      _onlineBudget,
-                                    ),
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        _buildRemainingCard(
+                          title: "Online Remaining",
+                          icon: Icons.account_balance_wallet_outlined,
+                          amount: _onlineRemaining,
+                          progress: _onlineProgress,
+                          percentText: _formatPercent(
+                            _onlineExpense,
+                            _onlineBudget,
                           ),
+                          color: Colors.blue,
+                          margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
                         ),
                       ],
                     ),
@@ -303,172 +344,148 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // 🔥 Bottom Fixed Buttons
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 350),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text("Add Expense"),
-                      onPressed: () async {
-                        await Navigator.pushNamed(context, '/add_expense');
-                        _loadExpensesSeparately();
-                      },
+            // Bottom buttons
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text("Add Expense"),
+                        onPressed: () async {
+                          await Navigator.pushNamed(context, '/add_expense');
+                          _loadExpensesSeparately();
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.account_balance_wallet),
-                      label: const Text("Add Budget"),
-                      onPressed: () async {
-                        await Navigator.pushNamed(context, '/budget');
-                        _loadBudgetsSeparately();
-                      },
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.account_balance_wallet),
+                        label: const Text("Add Budget"),
+                        onPressed: () async {
+                          await Navigator.pushNamed(context, '/budget');
+                          _loadBudgetsSeparately();
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
+
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
-            padding: EdgeInsets.zero,
             children: [
               DrawerHeader(
-                decoration: BoxDecoration(
-                  border: BoxBorder.all(width: 1),
-                  color: Colors.blue,
-                ),
+                decoration: const BoxDecoration(color: Colors.blue),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Color.fromARGB(255, 165, 255, 137),
+                      radius: 36,
+                      backgroundColor: Colors.white,
                       child: Text(
                         getInitials(_username),
                         style: const TextStyle(
-                          fontSize: 28,
+                          fontSize: 26,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                          color: Colors.blue,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 8),
                     Text(
                       _username,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                        color: Colors.white,
                       ),
                       overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
                     ),
                     Text(
                       _useremail,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+                      style: const TextStyle(color: Colors.white70),
                       overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
                     ),
                   ],
                 ),
               ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text("My Profile"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/profiles');
-                },
-              ),
-              const Divider(thickness: 1),
-              ListTile(
-                leading: const Icon(Icons.info),
-                title: const Text('About us'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/about');
-                },
-              ),
-              const Divider(thickness: 1),
-              ListTile(
-                leading: const Icon(Icons.wallet),
-                title: const Text("Expense Tracker"),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Navigator.pushNamed(context, '/expense_tracker');
-                  _loadExpensesSeparately();
-                },
-              ),
-              const Divider(thickness: 1),
-              ListTile(
-                leading: const Icon(Icons.money),
-                title: const Text("Manage Budget"),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Navigator.pushNamed(context, '/budget_tracker');
-                  _loadBudgetsSeparately();
-                },
-              ),
-              const Divider(thickness: 1),
-              ListTile(
-                leading: const Icon(Icons.question_mark),
-                title: const Text("How To Use"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/how_to_use');
-                },
-              ),
-              const Divider(thickness: 1),
+              _drawerItem(Icons.person, "My Profile", '/profiles'),
+              _drawerItem(Icons.info, "About Us", '/about'),
+              _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
+              _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+              _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Sign Out"),
-                onTap: () => _logout(),
+                onTap: _logout,
               ),
-              const Divider(thickness: 1),
             ],
           ),
         ),
       ),
-      // floatingActionButton: Column(
-      //   mainAxisSize: MainAxisSize.min,
-      //   crossAxisAlignment: CrossAxisAlignment.end,
-      //   children: [
-      //     FloatingActionButton.extended(
-      //       heroTag: 'fab_expense',
-      //       onPressed: () async {
-      //         await Navigator.pushNamed(context, '/add_expense');
-      //         _loadExpensesSeparately(); // refresh after coming back
-      //       },
-      //       icon: const Icon(Icons.add),
-      //       label: const Text('Add Expense'),
-      //     ),
-      //     const SizedBox(height: 12),
-      //     FloatingActionButton.extended(
-      //       heroTag: 'fab_budget',
-      //       onPressed: () async {
-      //         await Navigator.pushNamed(context, '/budget');
-      //         _loadBudgetsSeparately(); // refresh after coming back
-      //       },
-      //       icon: const Icon(Icons.account_balance_wallet),
-      //       label: const Text('Add Budget'),
-      //     ),
-      //   ],
-      // ),
+    );
+  }
+
+  Widget _drawerItem(IconData icon, String title, String route) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      onTap: () {
+        Navigator.pop(context);
+        Navigator.pushNamed(context, route);
+      },
+    );
+  }
+
+  Widget _buildRemainingCard({
+    required String title,
+    required IconData icon,
+    required double amount,
+    required double progress,
+    required String percentText,
+    required Color color,
+    required EdgeInsets margin,
+  }) {
+    return Expanded(
+      child: Card(
+        margin: margin,
+        child: ListTile(
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "₹ ${amount.toStringAsFixed(2)}",
+                style: TextStyle(
+                  color: _amountColor(amount),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: progress,
+                color: color,
+                backgroundColor: Colors.grey.shade300,
+              ),
+              const SizedBox(height: 2),
+              Text(percentText, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
