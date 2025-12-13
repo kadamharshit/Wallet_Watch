@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -27,10 +26,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   }
 
   // ---------------- LOAD ----------------
-  void _loadBudgetsForMonth(String month) async {
+  Future<void> _loadBudgetsForMonth(String month) async {
     final allBudgets = await DatabaseHelper.instance.getBudget();
+
     final filtered = allBudgets
-        .where((b) => (b['date'] ?? '').startsWith(month))
+        .where((b) => (b['date'] ?? '').toString().startsWith(month))
         .toList();
 
     double cash = 0;
@@ -55,6 +55,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   // ---------------- FILTER ----------------
   List<Map<String, dynamic>> get _filteredByMode {
     if (_filterMode == 'All') return _filteredBudgets;
+
     return _filteredBudgets.where((b) {
       return (b['mode'] ?? '').toString().toLowerCase() ==
           _filterMode.toLowerCase();
@@ -128,16 +129,13 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
 
     if (result == true) {
-      final localId = entry['id'];
-      final supabaseId = entry['supabase_id'];
+      await DatabaseHelper.instance.deleteBudget(entry['id']);
 
-      await DatabaseHelper.instance.deleteBudget(localId);
-
-      if (supabaseId != null) {
+      if (entry['supabase_id'] != null) {
         await Supabase.instance.client
             .from('budgets')
             .delete()
-            .eq('id', supabaseId);
+            .eq('id', entry['supabase_id']);
       }
 
       _loadBudgetsForMonth(_selectedMonth);
@@ -149,6 +147,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   // ---------------- SUMMARY ----------------
   Widget _buildSummary() {
     final total = _cashTotal + _onlineTotal;
+
     final cashFrac = total == 0 ? 0 : _cashTotal / total;
     final onlineFrac = total == 0 ? 0 : _onlineTotal / total;
 
@@ -207,44 +206,28 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   // ---------------- CARD ----------------
   Widget _buildBudgetCard(Map<String, dynamic> item) {
     final amount = (item['total'] as num?)?.toDouble() ?? 0;
-    final mode = (item['mode'] ?? 'Cash').toString();
-    final bank = (item['bank'] ?? '').toString();
-    final isOnline = mode.toLowerCase() == 'online';
+    final isOnline = (item['mode'] ?? '') == 'Online';
 
     return Dismissible(
       key: ValueKey(item['id']),
-      background: Container(
-        color: Colors.blue,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: const Row(
-          children: [
-            Icon(Icons.edit, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Edit', style: TextStyle(color: Colors.white)),
-          ],
-        ),
+      background: _slideBg(
+        Icons.edit,
+        'Edit',
+        Colors.blue,
+        Alignment.centerLeft,
       ),
-      secondaryBackground: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text('Delete', style: TextStyle(color: Colors.white)),
-            SizedBox(width: 8),
-            Icon(Icons.delete, color: Colors.white),
-          ],
-        ),
+      secondaryBackground: _slideBg(
+        Icons.delete,
+        'Delete',
+        Colors.red,
+        Alignment.centerRight,
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           await _showEditDialog(item);
           return false;
-        } else {
-          return await _confirmDelete(item);
         }
+        return await _confirmDelete(item);
       },
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -260,9 +243,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             ),
           ),
           title: Text(
-            isOnline
-                ? (bank.isNotEmpty ? bank : 'Online Budget')
-                : 'Cash Budget',
+            isOnline && (item['bank'] ?? '').toString().isNotEmpty
+                ? item['bank']
+                : '${item['mode']} Budget',
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           subtitle: Text("Date: ${item['date']}"),
@@ -271,6 +254,33 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _slideBg(
+    IconData icon,
+    String text,
+    Color color,
+    Alignment alignment,
+  ) {
+    return Container(
+      color: color,
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (alignment == Alignment.centerLeft) ...[
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(text, style: const TextStyle(color: Colors.white)),
+          ] else ...[
+            Text(text, style: const TextStyle(color: Colors.white)),
+            const SizedBox(width: 8),
+            Icon(icon, color: Colors.white),
+          ],
+        ],
       ),
     );
   }
@@ -293,23 +303,15 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Wrap(
               spacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  selected: _filterMode == 'All',
-                  onSelected: (_) => setState(() => _filterMode = 'All'),
-                ),
-                ChoiceChip(
-                  label: const Text('Cash'),
-                  selected: _filterMode == 'Cash',
-                  onSelected: (_) => setState(() => _filterMode = 'Cash'),
-                ),
-                ChoiceChip(
-                  label: const Text('Online'),
-                  selected: _filterMode == 'Online',
-                  onSelected: (_) => setState(() => _filterMode = 'Online'),
-                ),
-              ],
+              children: ['All', 'Cash', 'Online']
+                  .map(
+                    (m) => ChoiceChip(
+                      label: Text(m),
+                      selected: _filterMode == m,
+                      onSelected: (_) => setState(() => _filterMode = m),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
           const SizedBox(height: 8),
