@@ -19,10 +19,13 @@ class _EditExpensePageState extends State<EditExpensePage> {
   late TextEditingController _shopController;
   late TextEditingController _itemsController;
   late TextEditingController _amountController;
+  late TextEditingController _dateController;
 
   String _category = 'Grocery';
   String _mode = 'Cash';
-  TextEditingController _bankController = TextEditingController();
+  final TextEditingController _bankController = TextEditingController();
+
+  bool _saving = false;
 
   final List<String> _categories = const [
     'Grocery',
@@ -44,9 +47,13 @@ class _EditExpensePageState extends State<EditExpensePage> {
     _dateString =
         (exp['date'] ?? DateFormat('yyyy-MM-dd').format(DateTime.now()))
             .toString();
+
+    _dateController = TextEditingController(text: _dateString);
+
     _shopController = TextEditingController(
       text: (exp['shop'] ?? '').toString(),
     );
+
     _itemsController = TextEditingController(
       text: (exp['items'] ?? '').toString(),
     );
@@ -64,13 +71,12 @@ class _EditExpensePageState extends State<EditExpensePage> {
     final amount = (exp['total'] as num?)?.toDouble() ?? 0.0;
     _amountController = TextEditingController(text: amount.toStringAsFixed(2));
 
-    _bankController = TextEditingController(
-      text: (exp['bank'] ?? '').toString(),
-    );
+    _bankController.text = (exp['bank'] ?? '').toString();
   }
 
   Future<void> _pickDate() async {
     final initial = DateTime.tryParse(_dateString) ?? DateTime.now();
+
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -79,8 +85,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
     );
 
     if (picked != null) {
+      _dateString = DateFormat('yyyy-MM-dd').format(picked);
       setState(() {
-        _dateString = DateFormat('yyyy-MM-dd').format(picked);
+        _dateController.text = _dateString;
       });
     }
   }
@@ -95,6 +102,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
       );
       return;
     }
+
+    setState(() => _saving = true);
 
     final updatedExpense = {
       'date': _dateString,
@@ -113,7 +122,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
         await DatabaseHelper.instance.updateExpense(localId, updatedExpense);
       }
 
-      // 2️⃣ Best-effort update in Supabase
+      // 2️⃣ Best-effort update Supabase
       final supabase = Supabase.instance.client;
       final user = supabase.auth.currentUser;
 
@@ -123,9 +132,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
         final dataForSupabase = {
           'date': _dateString,
-          'shop': _shopController.text.trim(),
+          'shop': updatedExpense['shop'],
           'category': _category,
-          'items': _itemsController.text.trim(),
+          'items': updatedExpense['items'],
           'total': amount,
           'mode': _mode,
           'bank': _mode == 'Online' ? _bankController.text.trim() : null,
@@ -146,16 +155,19 @@ class _EditExpensePageState extends State<EditExpensePage> {
         }
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Expense updated ✅')));
-
-      Navigator.pop(context, true);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Expense updated ✅')));
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       debugPrint('Edit error: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to update expense: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -165,24 +177,38 @@ class _EditExpensePageState extends State<EditExpensePage> {
     _itemsController.dispose();
     _amountController.dispose();
     _bankController.dispose();
+    _dateController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Expense')),
+      appBar: AppBar(
+        title: const Text('Edit Expense'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              TextButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_today),
-                label: Text(_dateString),
+              InkWell(
+                onTap: _pickDate,
+                child: IgnorePointer(
+                  child: TextFormField(
+                    controller: _dateController,
+                    decoration: const InputDecoration(
+                      labelText: 'Date',
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                  ),
+                ),
               ),
+              const SizedBox(height: 12),
+
               TextFormField(
                 controller: _shopController,
                 decoration: const InputDecoration(
@@ -193,19 +219,19 @@ class _EditExpensePageState extends State<EditExpensePage> {
                     : null,
               ),
               const SizedBox(height: 12),
+
               DropdownButtonFormField<String>(
                 value: _category,
                 items: _categories
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
                 onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _category = val);
-                  }
+                  if (val != null) setState(() => _category = val);
                 },
                 decoration: const InputDecoration(labelText: 'Category'),
               ),
               const SizedBox(height: 12),
+
               DropdownButtonFormField<String>(
                 value: _mode,
                 items: _modes
@@ -213,11 +239,15 @@ class _EditExpensePageState extends State<EditExpensePage> {
                     .toList(),
                 onChanged: (val) {
                   if (val != null) {
-                    setState(() => _mode = val);
+                    setState(() {
+                      _mode = val;
+                      if (_mode == 'Cash') _bankController.clear();
+                    });
                   }
                 },
                 decoration: const InputDecoration(labelText: 'Paid By'),
               ),
+
               if (_mode == 'Online') ...[
                 const SizedBox(height: 12),
                 TextFormField(
@@ -227,28 +257,39 @@ class _EditExpensePageState extends State<EditExpensePage> {
                   ),
                 ),
               ],
+
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
                 decoration: const InputDecoration(labelText: 'Amount'),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 validator: (val) =>
                     val == null || val.isEmpty ? 'Enter amount' : null,
               ),
               const SizedBox(height: 12),
+
               TextFormField(
                 controller: _itemsController,
+                maxLines: 5,
                 decoration: const InputDecoration(
                   labelText: 'Items (raw text)',
                   helperText:
                       'Each line can be "name | qty | amount" or any text you used earlier.',
                 ),
-                maxLines: 5,
               ),
+
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _saveChanges,
-                child: const Text('Save Changes'),
+                onPressed: _saving ? null : _saveChanges,
+                child: _saving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save Changes'),
               ),
             ],
           ),
