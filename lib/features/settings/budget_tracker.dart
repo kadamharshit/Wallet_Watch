@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
-import 'dart:collection';
 
 class BudgetTracker extends StatefulWidget {
   const BudgetTracker({super.key});
@@ -12,55 +11,34 @@ class BudgetTracker extends StatefulWidget {
 }
 
 class _BudgetTrackerState extends State<BudgetTracker> {
-  late Future<List<Map<String, dynamic>>> _budgetList = Future.value([]);
-  List<String> _availableMonths = [];
-  String _selectedMonth = '';
+  List<Map<String, dynamic>> _filteredBudgets = [];
+
   double _cashTotal = 0.0;
   double _onlineTotal = 0.0;
-  List<Map<String, dynamic>> _filteredBudgets = [];
+
+  String _filterMode = 'All'; // All / Cash / Online
+  String _selectedMonth =
+      "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
 
   @override
   void initState() {
     super.initState();
-    _initializeMonthList();
-  }
-
-  void _initializeMonthList() async {
-    final allBudgets = await DatabaseHelper.instance.getBudget();
-    final monthSet = <String>{};
-
-    for (var entry in allBudgets) {
-      final date = entry['date'] ?? '';
-      if (date.length >= 7) {
-        monthSet.add(date.substring(0, 7));
-      }
-    }
-
-    final sortedMonths = monthSet.toList()..sort((a, b) => b.compareTo(a));
-
-    setState(() {
-      _availableMonths = sortedMonths;
-      _selectedMonth = sortedMonths.isNotEmpty
-          ? sortedMonths.first
-          : "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
-    });
-
     _loadBudgetsForMonth(_selectedMonth);
   }
 
+  // ---------------- LOAD ----------------
   void _loadBudgetsForMonth(String month) async {
     final allBudgets = await DatabaseHelper.instance.getBudget();
-    final filtered = allBudgets.where((entry) {
-      final date = entry['date'] ?? '';
-      return date.startsWith(month);
-    }).toList();
+    final filtered = allBudgets
+        .where((b) => (b['date'] ?? '').startsWith(month))
+        .toList();
 
-    double cash = 0.0;
-    double online = 0.0;
+    double cash = 0;
+    double online = 0;
 
-    for (var entry in filtered) {
-      final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
-      if (entry['mode'] == 'Cash') {
+    for (final b in filtered) {
+      final amount = (b['total'] as num?)?.toDouble() ?? 0;
+      if ((b['mode'] ?? '') == 'Cash') {
         cash += amount;
       } else {
         online += amount;
@@ -68,49 +46,31 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     }
 
     setState(() {
-      _budgetList = Future.value(filtered);
       _filteredBudgets = filtered;
       _cashTotal = cash;
       _onlineTotal = online;
     });
   }
 
-  String _getMonthName(int month) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return months[month - 1];
+  // ---------------- FILTER ----------------
+  List<Map<String, dynamic>> get _filteredByMode {
+    if (_filterMode == 'All') return _filteredBudgets;
+    return _filteredBudgets.where((b) {
+      return (b['mode'] ?? '').toString().toLowerCase() ==
+          _filterMode.toLowerCase();
+    }).toList();
   }
 
-  String _formatMonthLabel(String monthYear) {
-    final parts = monthYear.split('-');
-    final year = parts[0];
-    final month = int.parse(parts[1]);
-    return "${_getMonthName(month)} $year";
-  }
-
+  // ---------------- EDIT ----------------
   Future<void> _showEditDialog(Map<String, dynamic> entry) async {
-    final amountController = TextEditingController(
-      text: entry['total'].toString(),
-    );
+    final controller = TextEditingController(text: entry['total'].toString());
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Edit Budget"),
         content: TextField(
-          controller: amountController,
+          controller: controller,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: "Amount"),
         ),
@@ -121,22 +81,20 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final newAmount = double.tryParse(amountController.text);
-              if (newAmount != null) {
+              final value = double.tryParse(controller.text);
+              if (value != null) {
                 await DatabaseHelper.instance.updateBudget(entry['id'], {
-                  'date': entry['date'],
-                  'total': newAmount,
-                  'mode': entry['mode'],
-                  'bank': entry['bank'] ?? '',
+                  'total': value,
                 });
+
                 final supabaseId = entry['supabase_id'];
                 if (supabaseId != null) {
-                  final supabase = Supabase.instance.client;
-                  await supabase
+                  await Supabase.instance.client
                       .from('budgets')
-                      .update({'total': newAmount})
+                      .update({'total': value})
                       .eq('id', supabaseId);
                 }
+
                 Navigator.pop(context);
                 _loadBudgetsForMonth(_selectedMonth);
               }
@@ -148,12 +106,13 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  Future<void> _confirmDelete(Map<String, dynamic> entry) async {
-    final confirmed = await showDialog<bool>(
+  // ---------------- DELETE ----------------
+  Future<bool> _confirmDelete(Map<String, dynamic> entry) async {
+    final result = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Delete Budget Entry"),
-        content: const Text("Are you sure you want to delete this entry?"),
+        title: const Text("Delete budget?"),
+        content: const Text("This action cannot be undone."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -161,178 +120,206 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text("Delete"),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
-      final localId = entry['id'] as int;
+    if (result == true) {
+      final localId = entry['id'];
       final supabaseId = entry['supabase_id'];
 
-      try {
-        //1. delete from supabase if we know the remote id
+      await DatabaseHelper.instance.deleteBudget(localId);
 
-        if (supabaseId != null) {
-          final supabase = Supabase.instance.client;
-          await supabase.from('budgets').delete().eq('id', supabaseId);
-        }
-
-        //2. Delete from local SQLite
-        await DatabaseHelper.instance.deleteBudget(localId);
-
-        //3. Refresg List
-        _loadBudgetsForMonth(_selectedMonth);
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Budget entry deleted")));
-      } catch (e) {
-        debugPrint("Error deleting budget: $e");
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to delete Budget Entry")),
-        );
+      if (supabaseId != null) {
+        await Supabase.instance.client
+            .from('budgets')
+            .delete()
+            .eq('id', supabaseId);
       }
+
+      _loadBudgetsForMonth(_selectedMonth);
+      return true;
     }
+    return false;
   }
 
+  // ---------------- SUMMARY ----------------
+  Widget _buildSummary() {
+    final total = _cashTotal + _onlineTotal;
+    final cashFrac = total == 0 ? 0 : _cashTotal / total;
+    final onlineFrac = total == 0 ? 0 : _onlineTotal / total;
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "This Month's Budget",
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Total: ₹${total.toStringAsFixed(2)}",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text("Cash: ₹${_cashTotal.toStringAsFixed(2)}"),
+                ),
+                Expanded(
+                  child: Text(
+                    "Online: ₹${_onlineTotal.toStringAsFixed(2)}",
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: (cashFrac * 1000).round(),
+                    child: Container(height: 6, color: Colors.green),
+                  ),
+                  Expanded(
+                    flex: (onlineFrac * 1000).round(),
+                    child: Container(height: 6, color: Colors.blue),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------- CARD ----------------
+  Widget _buildBudgetCard(Map<String, dynamic> item) {
+    final amount = (item['total'] as num?)?.toDouble() ?? 0;
+    final mode = (item['mode'] ?? 'Cash').toString();
+    final bank = (item['bank'] ?? '').toString();
+    final isOnline = mode.toLowerCase() == 'online';
+
+    return Dismissible(
+      key: ValueKey(item['id']),
+      background: Container(
+        color: Colors.blue,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: const Row(
+          children: [
+            Icon(Icons.edit, color: Colors.white),
+            SizedBox(width: 8),
+            Text('Edit', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+      secondaryBackground: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text('Delete', style: TextStyle(color: Colors.white)),
+            SizedBox(width: 8),
+            Icon(Icons.delete, color: Colors.white),
+          ],
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          await _showEditDialog(item);
+          return false;
+        } else {
+          return await _confirmDelete(item);
+        }
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: isOnline
+                ? Colors.blue.withOpacity(0.12)
+                : Colors.green.withOpacity(0.12),
+            child: Icon(
+              isOnline ? Icons.account_balance_wallet : Icons.money,
+              color: isOnline ? Colors.blue : Colors.green,
+            ),
+          ),
+          title: Text(
+            isOnline
+                ? (bank.isNotEmpty ? bank : 'Online Budget')
+                : 'Cash Budget',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text("Date: ${item['date']}"),
+          trailing: Text(
+            "₹${amount.toStringAsFixed(2)}",
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
-    // Group online budgets by bank
-    final onlineByBank = <String, List<Map<String, dynamic>>>{};
-    for (var entry in _filteredBudgets) {
-      if (entry['mode'] != 'Cash') {
-        final bank = (entry['bank'] as String?)?.isNotEmpty == true
-            ? entry['bank']
-            : 'Unknown';
-        onlineByBank.putIfAbsent(bank!, () => []).add(entry);
-      }
-    }
-
-    final cashEntries = _filteredBudgets
-        .where((e) => e['mode'] == 'Cash')
-        .toList();
+    final list = _filteredByMode;
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
+        title: const Text("Budget Tracker"),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-        title: const Text("Budget Tracker"),
       ),
       body: Column(
         children: [
-          if (_availableMonths.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: DropdownButton<String>(
-                value: _selectedMonth,
-                isExpanded: true,
-                items: _availableMonths.map((month) {
-                  return DropdownMenuItem<String>(
-                    value: month,
-                    child: Text(_formatMonthLabel(month)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedMonth = value;
-                    });
-                    _loadBudgetsForMonth(value);
-                  }
-                },
-              ),
-            ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            width: double.infinity,
-            color: Colors.teal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          _buildSummary(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Wrap(
+              spacing: 8,
               children: [
-                Text(
-                  "Cash Budget – ${_formatMonthLabel(_selectedMonth)}: ₹${_cashTotal.toStringAsFixed(2)}",
-                  style: const TextStyle(fontSize: 16, color: Colors.white),
+                ChoiceChip(
+                  label: const Text('All'),
+                  selected: _filterMode == 'All',
+                  onSelected: (_) => setState(() => _filterMode = 'All'),
                 ),
-                Text(
-                  "Online Budget – ${_formatMonthLabel(_selectedMonth)}: ₹${_onlineTotal.toStringAsFixed(2)}",
-                  style: const TextStyle(fontSize: 16, color: Colors.white),
+                ChoiceChip(
+                  label: const Text('Cash'),
+                  selected: _filterMode == 'Cash',
+                  onSelected: (_) => setState(() => _filterMode = 'Cash'),
+                ),
+                ChoiceChip(
+                  label: const Text('Online'),
+                  selected: _filterMode == 'Online',
+                  onSelected: (_) => setState(() => _filterMode = 'Online'),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 8),
           Expanded(
-            child: ListView(
-              children: [
-                ExpansionTile(
-                  title: const Text("Cash"),
-                  children: cashEntries.map((item) {
-                    return ListTile(
-                      leading: const Icon(
-                        Icons.attach_money,
-                        color: Colors.green,
-                      ),
-                      title: Text(
-                        "₹${(item['total'] as double).toStringAsFixed(2)}",
-                      ),
-                      subtitle: Text(
-                        "Date: ${item['date']} • Mode: ${item['mode']}",
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.orange),
-                            onPressed: () => _showEditDialog(item),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _confirmDelete(item),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-                ...onlineByBank.entries.map((entry) {
-                  return ExpansionTile(
-                    title: Text("Online - ${entry.key}"),
-                    children: entry.value.map((item) {
-                      return ListTile(
-                        leading: const Icon(
-                          Icons.account_balance_wallet,
-                          color: Colors.blue,
-                        ),
-                        title: Text(
-                          "₹${(item['total'] as double).toStringAsFixed(2)}",
-                        ),
-                        subtitle: Text(
-                          "Date: ${item['date']} • Mode: ${item['mode']} • Bank: ${item['bank'] ?? 'Unknown'}",
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.edit,
-                                color: Colors.orange,
-                              ),
-                              onPressed: () => _showEditDialog(item),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmDelete(item),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  );
-                }).toList(),
-              ],
-            ),
+            child: list.isEmpty
+                ? const Center(child: Text("No budget entries found"))
+                : ListView.builder(
+                    itemCount: list.length,
+                    itemBuilder: (_, i) => _buildBudgetCard(list[i]),
+                  ),
           ),
         ],
       ),
