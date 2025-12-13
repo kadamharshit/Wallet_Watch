@@ -10,11 +10,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
   bool _isLoading = false;
   String? _errorMessage;
-
   bool _isPasswordVisible = false;
 
   final supabase = Supabase.instance.client;
@@ -28,50 +28,35 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final username = _usernameController.text.trim();
+      final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      // 1️⃣ Find user record from `users` table by username
-      final userRecord = await supabase
-          .from('users')
-          .select()
-          .eq('username', username)
-          .maybeSingle();
+      final authRes = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
 
-      if (userRecord == null) {
-        setState(() {
-          _errorMessage = "No account found with this username";
-        });
+      if (authRes.user != null) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Login successful')));
+
+        Navigator.pushReplacementNamed(context, '/home');
       } else {
-        final email = (userRecord['email'] as String).trim();
-
-        // 2️⃣ Use Supabase Auth with email + password
-        try {
-          final authRes = await supabase.auth.signInWithPassword(
-            email: email,
-            password: password,
-          );
-
-          if (authRes.user != null) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Welcome ${userRecord['name']}!')),
-            );
-            Navigator.pushReplacementNamed(context, '/home');
-          } else {
-            setState(() {
-              _errorMessage = 'Incorrect email or password.';
-            });
-          }
-        } on AuthException catch (e) {
-          setState(() {
-            _errorMessage = e.message;
-          });
-        }
+        setState(() {
+          _errorMessage = "Invalid email or password";
+        });
       }
-    } catch (error) {
+    } on AuthException catch (e) {
       setState(() {
-        _errorMessage = "Unexpected error occurred. Try again.";
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      debugPrint("Login error: $e");
+      setState(() {
+        _errorMessage = "Something went wrong. Try again.";
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -91,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             elevation: 6,
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(24),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -105,21 +90,36 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // EMAIL
                     TextFormField(
-                      controller: _usernameController,
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
-                        labelText: "Username",
-                        prefixIcon: Icon(Icons.person),
+                        labelText: "Email",
+                        prefixIcon: Icon(Icons.email),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? "Enter your username" : null,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return "Enter your email";
+                        }
+                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                          return "Enter a valid email";
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 16),
+
+                    // PASSWORD
                     TextFormField(
                       controller: _passwordController,
+                      obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         labelText: "Password",
+                        prefixIcon: const Icon(Icons.lock),
+                        border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           onPressed: () {
                             setState(() {
@@ -132,19 +132,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : Icons.visibility_off,
                           ),
                         ),
-                        prefixIcon: const Icon(Icons.lock),
-                        border: const OutlineInputBorder(),
                       ),
-                      obscureText: !_isPasswordVisible,
-                      validator: (value) =>
-                          value!.isEmpty ? "Enter your password" : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? "Enter your password"
+                          : null,
                     ),
+
                     const SizedBox(height: 16),
                     if (_errorMessage != null)
                       Text(
                         _errorMessage!,
                         style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
+
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _login,
@@ -156,6 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text("Login", style: TextStyle(fontSize: 18)),
                     ),
+
                     const SizedBox(height: 16),
                     GestureDetector(
                       onTap: () {
