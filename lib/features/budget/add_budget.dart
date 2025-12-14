@@ -144,7 +144,7 @@ class _AddBudgetState extends State<AddBudget> {
           final uuid = const Uuid().v4();
 
           final localId = await DatabaseHelper.instance.insertBudget({
-            'user_id': user.id,
+            //'user_id': user.id,
             'uuid': uuid,
             'date': date,
             'mode': 'Online',
