@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:walletwatch/services/expense_database.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -170,21 +171,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadBudgetsSeparately() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    final now = DateTime.now();
+    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final response = await supabase
-        .from('budgets')
-        .select('mode, total')
-        .eq('user_id', user.id);
+    final budgets = await DatabaseHelper.instance.getBudget();
 
     double cash = 0.0;
     double online = 0.0;
 
-    for (final entry in response) {
+    for (final entry in budgets) {
+      final date = (entry['date'] ?? '').toString();
+      if (!date.startsWith(currentMonth)) continue;
+
+      final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
       final mode = (entry['mode'] ?? 'Cash').toString();
-      final amount = (entry['total'] as num).toDouble();
-      mode == 'Online' ? online += amount : cash += amount;
+
+      if (mode == 'Online') {
+        online += amount;
+      } else {
+        cash += amount;
+      }
     }
 
     setState(() {
