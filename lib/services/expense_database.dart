@@ -126,6 +126,20 @@ class DatabaseHelper {
     return await db.query('budget', where: 'synced = ?', whereArgs: [0]);
   }
 
+  Future<bool> isLocalDatabaseEmpty() async {
+    final db = await database;
+
+    final expCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM expenses'),
+    );
+
+    final budgetCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM budget'),
+    );
+
+    return (expCount ?? 0) == 0 && (budgetCount ?? 0) == 0;
+  }
+
   Future<void> updateBudget(int id, Map<String, dynamic> values) async {
     final db = await database;
     await db.update('budget', values, where: 'id = ?', whereArgs: [id]);

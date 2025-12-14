@@ -88,6 +88,199 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     setState(() => _isLoading = false);
   }
 
+  //-----------------------INFO CARD WIDGET---------------------
+  Widget _infoRow(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value?.toString() ?? '-',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  //-------------------SHOW EXPENSE DETAILS-------------------
+  void _showExpenseDetails(Map<String, dynamic> expense) {
+    final itemsRaw = (expense['items'] ?? '').toString();
+    final items = itemsRaw.isNotEmpty ? itemsRaw.split('\n') : [];
+
+    final isTravel = expense['category'] == 'Travel';
+
+    final headers = isTravel
+        ? ['Mode', 'From', 'To', 'Amount']
+        : ['Item', 'Qty', 'Amount'];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _infoRow('Shop/Type', expense['shop']),
+              _infoRow('Date', expense['date']),
+              _infoRow('Category', expense['category']),
+              _infoRow('Mode', expense['mode']),
+              if ((expense['bank'] ?? '').toString().isNotEmpty)
+                _infoRow('Bank', expense['bank']),
+              _infoRow('Total', '₹${expense['total']}'),
+
+              const SizedBox(height: 16),
+              const Text(
+                'Items',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 280,
+                child: items.isEmpty
+                    ? const Center(child: Text('No item details'))
+                    : Column(
+                        children: [
+                          _tableHeader(headers),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: items.length,
+                              itemBuilder: (_, i) {
+                                final parts = items[i]
+                                    .split('|')
+                                    .map((e) => e.trim())
+                                    .toList();
+                                if (isTravel && parts.length == 4) {
+                                  // Detect amount position
+                                  final amountIndex = parts.indexWhere(
+                                    (p) => double.tryParse(p) != null,
+                                  );
+
+                                  if (amountIndex != 3 && amountIndex != -1) {
+                                    final amount = parts.removeAt(amountIndex);
+                                    parts.add(amount); // move amount to last
+                                  }
+                                }
+                                if (!isTravel && parts.length == 3) {
+                                  // Item | Qty | Amount
+                                  final amountIndex = parts.indexWhere(
+                                    (p) => double.tryParse(p) != null,
+                                  );
+
+                                  if (amountIndex != -1 && amountIndex != 2) {
+                                    final amount = parts.removeAt(amountIndex);
+                                    parts.add(amount);
+                                  }
+                                }
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Row(
+                                      children: isTravel
+                                          ? [
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 0
+                                                      ? parts[0]
+                                                      : '-',
+                                                ),
+                                              ), // Mode
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 1
+                                                      ? parts[1]
+                                                      : '-',
+                                                ),
+                                              ), // From
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 2
+                                                      ? parts[2]
+                                                      : '-',
+                                                ),
+                                              ), // To
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 3
+                                                      ? '₹${double.tryParse(parts[3])?.toStringAsFixed(2) ?? parts[3]}'
+                                                      : '-',
+                                                  textAlign: TextAlign.right,
+                                                ),
+                                              ), // Amount
+                                            ]
+                                          : [
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 0
+                                                      ? parts[0]
+                                                      : '-',
+                                                ),
+                                              ), // Item
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 1
+                                                      ? parts[1]
+                                                      : '-',
+                                                ),
+                                              ), // Qty
+                                              Expanded(
+                                                child: Text(
+                                                  parts.length > 2
+                                                      ? '₹${parts[2]}'
+                                                      : '-',
+                                                  textAlign: TextAlign.right,
+                                                ),
+                                              ), // Amount
+                                            ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // ---------------- SYNC ----------------
   Future<void> _syncLocalToSupabase() async {
     final user = supabase.auth.currentUser;
@@ -191,12 +384,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     final isOnline = (exp['mode'] ?? '').toString().toLowerCase() == 'online';
 
     return ListTile(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => EditExpensePage(expense: exp)),
-        ).then((_) => _loadExpenses());
-      },
+      onTap: () => _showExpenseDetails(exp),
       leading: CircleAvatar(
         backgroundColor: isOnline
             ? Colors.blue.withOpacity(.1)
@@ -211,6 +399,31 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       trailing: Text(
         "₹${amount.toStringAsFixed(2)}",
         style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  //-------------table to show the expense------------------
+  Widget _tableHeader(List<String> headers) {
+    return Card(
+      color: Colors.grey.shade200,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: headers
+              .map(
+                (h) => Expanded(
+                  child: Text(
+                    h,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }

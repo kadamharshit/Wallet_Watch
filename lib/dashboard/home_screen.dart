@@ -141,24 +141,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadExpensesSeparately() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final response = await supabase
-        .from('expenses')
-        .select('date, mode, total')
-        .eq('user_id', user.id);
+    final expenses = await DatabaseHelper.instance.getExpenses();
 
     double cash = 0.0;
     double online = 0.0;
 
-    for (final item in response) {
+    for (final item in expenses) {
       final date = item['date']?.toString();
       if (date != null && date.startsWith(currentMonth)) {
-        final amount = (item['total'] as num).toDouble();
+        final amount = (item['total'] as num?)?.toDouble() ?? 0.0;
         final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
         mode == 'online' ? online += amount : cash += amount;
       }

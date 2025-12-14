@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:walletwatch/services/expense_database.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,6 +41,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (authRes.user != null) {
         if (!mounted) return;
 
+        // ✅ STORE USER DATA LOCALLY (FOR OFFLINE DRAWER)
+        const storage = FlutterSecureStorage();
+        await storage.write(key: 'useremail', value: email);
+
+        // Optional (safe fallback)
+        await storage.write(key: 'username', value: email.split('@').first);
+
+        // ✅ INITIAL SYNC (you already wrote this correctly)
+        await _initialSupabaseToLocalSync(authRes.user!);
+
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Login successful')));
@@ -61,6 +73,58 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _initialSupabaseToLocalSync(User user) async {
+    final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
+
+    if (!isEmpty) {
+      debugPrint("Local DB already has data. Skipping initial sync.");
+      return;
+    }
+
+    debugPrint("Local DB empty. Syncing from Supabase...");
+
+    final expenses = await supabase
+        .from('expenses')
+        .select()
+        .eq('user_id', user.id);
+
+    final budgets = await supabase
+        .from('budgets')
+        .select()
+        .eq('user_id', user.id);
+
+    // ⬇️ Expenses
+    for (final e in expenses) {
+      await DatabaseHelper.instance.upsertExpenseByUuid({
+        'uuid': e['uuid'],
+        'supabase_id': e['id'],
+        'date': e['date'],
+        'shop': e['shop'],
+        'category': e['category'],
+        'items': e['items'],
+        'total': e['total'],
+        'mode': e['mode'],
+        'bank': e['bank'] ?? '',
+        'synced': 1,
+      });
+    }
+
+    // ⬇️ Budgets
+    for (final b in budgets) {
+      await DatabaseHelper.instance.insertBudget({
+        'uuid': b['uuid'],
+        'supabase_id': b['id'],
+        'date': b['date'],
+        'mode': b['mode'],
+        'total': b['total'],
+        'bank': b['bank'] ?? '',
+        'synced': 1,
+      });
+    }
+
+    debugPrint("Initial Supabase → SQLite sync completed.");
   }
 
   @override

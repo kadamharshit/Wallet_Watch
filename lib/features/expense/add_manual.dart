@@ -158,7 +158,25 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       'date': date,
       'shop': _shopController.text.trim(),
       'category': _selectedCategory,
-      'items': itemInputs.map((i) => i.values.join(' | ')).join('\n'),
+      'items': itemInputs
+          .map((i) {
+            if (_selectedCategory == 'Travel') {
+              return [
+                i['mode'] ?? '',
+                i['start'] ?? '',
+                i['destination'] ?? '',
+                i['amount'] ?? '0',
+              ].join(' | ');
+            } else {
+              return [
+                i['name'] ?? '',
+                i['qty'] ?? '',
+                i['amount'] ?? '0',
+              ].join(' | ');
+            }
+          })
+          .join('\n'),
+
       'total': total,
       'mode': _selectedPaymentMode,
       'bank': _selectedPaymentMode == 'Online' ? _selectedBank ?? '' : '',
