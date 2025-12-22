@@ -229,7 +229,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
+      // 🔥 IMPORTANT FIX
+      await DatabaseHelper.instance.clearAllTables();
+
       await supabase.auth.signOut();
+
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
       }
