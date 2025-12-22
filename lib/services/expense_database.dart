@@ -17,7 +17,16 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 3, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 3,
+      onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 3) {
+          // future migrations
+        }
+      },
+    );
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -148,5 +157,11 @@ class DatabaseHelper {
   Future<void> deleteBudget(int id) async {
     final db = await database;
     await db.delete('budget', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> clearAllTables() async {
+    final db = await database;
+    await db.delete('expenses');
+    await db.delete('budget');
   }
 }
