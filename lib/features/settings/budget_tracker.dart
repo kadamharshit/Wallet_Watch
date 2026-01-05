@@ -1,4 +1,6 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -15,6 +17,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   double _cashTotal = 0.0;
   double _onlineTotal = 0.0;
 
+  List<String> _availableMonths = [];
+
   String _filterMode = 'All'; // All / Cash / Online
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
@@ -25,9 +29,32 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     _loadBudgetsForMonth(_selectedMonth);
   }
 
+  // List<String> _getAvailableMonths() {
+  //   final months = _filteredBudgets
+  //       .map((b) => (b['date'] ?? '').toString().substring(0, 7))
+  //       .toSet()
+  //       .toList();
+
+  //   months.sort((a, b) => b.compareTo(a)); // latest first
+  //   return months;
+  // }
+
   // ---------------- LOAD ----------------
   Future<void> _loadBudgetsForMonth(String month) async {
     final allBudgets = await DatabaseHelper.instance.getBudget();
+
+    // ✅ Build available months safely
+    final months =
+        allBudgets
+            .map((b) => (b['date'] ?? '').toString().substring(0, 7))
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+
+    // ✅ Ensure selected month exists
+    if (!months.contains(month)) {
+      month = months.isNotEmpty ? months.first : month;
+    }
 
     final filtered = allBudgets
         .where((b) => (b['date'] ?? '').toString().startsWith(month))
@@ -46,6 +73,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     }
 
     setState(() {
+      _availableMonths = months;
+      _selectedMonth = month;
       _filteredBudgets = filtered;
       _cashTotal = cash;
       _onlineTotal = online;
@@ -285,6 +314,77 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
+  // -------------PIE CHART FOR BUDGET TRACKER-------------
+  Widget _buildBudgetPieChart() {
+    final total = _cashTotal + _onlineTotal;
+
+    if (total <= 0) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          "No budget data for this month",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 200,
+      child: PieChart(
+        PieChartData(
+          centerSpaceRadius: 40,
+          sectionsSpace: 2,
+          sections: [
+            PieChartSectionData(
+              value: _cashTotal,
+              color: Colors.green,
+              title: "${((_cashTotal / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            PieChartSectionData(
+              value: _onlineTotal,
+              color: Colors.blue,
+              title: "${((_onlineTotal / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  //--------------------------PIE CHART LEGEND----------------
+  Widget _buildPieLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _legendItem(Colors.green, "Cash"),
+        const SizedBox(width: 16),
+        _legendItem(Colors.blue, "Online"),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
+  }
+
   // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
@@ -298,6 +398,45 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month),
+                const SizedBox(width: 8),
+
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedMonth,
+                    decoration: const InputDecoration(
+                      labelText: "Select Month",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _availableMonths
+                        .map(
+                          (m) => DropdownMenuItem(
+                            value: m,
+                            child: Text(
+                              DateFormat(
+                                'MMMM yyyy',
+                              ).format(DateTime.parse('$m-01')),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedMonth = value);
+                        _loadBudgetsForMonth(value);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildBudgetPieChart(),
+          _buildPieLegend(),
           _buildSummary(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),

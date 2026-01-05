@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+
 import 'package:walletwatch/services/expense_database.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,22 +13,22 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // ---------------- State ----------------
   double _cashExpense = 0.0;
   double _onlineExpense = 0.0;
+
   double _cashBudget = 0.0;
   double _onlineBudget = 0.0;
+
   String _username = '';
   String _useremail = '';
 
   final supabase = Supabase.instance.client;
 
-  // Derived values
+  // ---------------- Derived Values ----------------
   double get _cashRemaining => _cashBudget - _cashExpense;
   double get _onlineRemaining => _onlineBudget - _onlineExpense;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
-
-  Color _amountColor(double value) =>
-      value >= 0 ? Colors.green : Colors.redAccent;
 
   double get _cashProgress =>
       _cashBudget <= 0 ? 0.0 : (_cashExpense / _cashBudget).clamp(0.0, 1.0);
@@ -36,12 +37,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ? 0.0
       : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
 
+  Color _amountColor(double value) =>
+      value >= 0 ? Colors.green : Colors.redAccent;
+
   String _formatPercent(double used, double total) {
     if (total <= 0) return "No budget set";
     final percent = (used / total * 100).clamp(0, 999).toStringAsFixed(0);
     return "$percent% of budget used";
   }
 
+  // ---------------- Lifecycle ----------------
   @override
   void initState() {
     super.initState();
@@ -50,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadBudgetsSeparately();
   }
 
+  // ---------------- Loaders ----------------
   Future<void> _loadUserInfo() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -68,7 +74,103 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  //------------------Pie Chart----------------------------
+  Future<void> _loadExpensesSeparately() async {
+    final now = DateTime.now();
+    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    final expenses = await DatabaseHelper.instance.getExpenses();
+
+    double cash = 0.0;
+    double online = 0.0;
+
+    for (final item in expenses) {
+      final date = item['date']?.toString();
+      if (date != null && date.startsWith(currentMonth)) {
+        final amount = (item['total'] as num?)?.toDouble() ?? 0.0;
+        final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
+
+        mode == 'online' ? online += amount : cash += amount;
+      }
+    }
+
+    setState(() {
+      _cashExpense = cash;
+      _onlineExpense = online;
+    });
+  }
+
+  Future<void> _loadBudgetsSeparately() async {
+    final now = DateTime.now();
+    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    final budgets = await DatabaseHelper.instance.getBudget();
+
+    double cash = 0.0;
+    double online = 0.0;
+
+    for (final entry in budgets) {
+      final date = (entry['date'] ?? '').toString();
+      if (!date.startsWith(currentMonth)) continue;
+
+      final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
+      final mode = (entry['mode'] ?? 'Cash').toString();
+
+      mode == 'Online' ? online += amount : cash += amount;
+    }
+
+    setState(() {
+      _cashBudget = cash;
+      _onlineBudget = online;
+    });
+  }
+
+  // ---------------- Helpers ----------------
+  String currentMonthYear() => DateFormat("MMMM yyyy").format(DateTime.now());
+
+  String getInitials(String name) {
+    if (name.trim().isEmpty) return "";
+    final parts = name.trim().split(" ");
+    return parts.length == 1
+        ? parts[0][0].toUpperCase()
+        : (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  Future<void> _refreshAll() async {
+    await _loadBudgetsSeparately();
+    await _loadExpensesSeparately();
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to sign out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("No"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text("Yes"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await DatabaseHelper.instance.clearAllTables();
+      await supabase.auth.signOut();
+
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    }
+  }
+
+  // ---------------- Pie Chart ----------------
   Widget _buildExpensePieChart() {
     final total = _cashExpense + _onlineExpense;
 
@@ -80,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+
     return SizedBox(
       height: 220,
       child: PieChart(
@@ -140,106 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _loadExpensesSeparately() async {
-    final now = DateTime.now();
-    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
-
-    final expenses = await DatabaseHelper.instance.getExpenses();
-
-    double cash = 0.0;
-    double online = 0.0;
-
-    for (final item in expenses) {
-      final date = item['date']?.toString();
-      if (date != null && date.startsWith(currentMonth)) {
-        final amount = (item['total'] as num?)?.toDouble() ?? 0.0;
-        final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
-        mode == 'online' ? online += amount : cash += amount;
-      }
-    }
-
-    setState(() {
-      _cashExpense = cash;
-      _onlineExpense = online;
-    });
-  }
-
-  Future<void> _loadBudgetsSeparately() async {
-    final now = DateTime.now();
-    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
-
-    final budgets = await DatabaseHelper.instance.getBudget();
-
-    double cash = 0.0;
-    double online = 0.0;
-
-    for (final entry in budgets) {
-      final date = (entry['date'] ?? '').toString();
-      if (!date.startsWith(currentMonth)) continue;
-
-      final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
-      final mode = (entry['mode'] ?? 'Cash').toString();
-
-      if (mode == 'Online') {
-        online += amount;
-      } else {
-        cash += amount;
-      }
-    }
-
-    setState(() {
-      _cashBudget = cash;
-      _onlineBudget = online;
-    });
-  }
-
-  String currentMonthYear() => DateFormat("MMMM yyyy").format(DateTime.now());
-
-  String getInitials(String name) {
-    if (name.trim().isEmpty) return "";
-    final parts = name.trim().split(" ");
-    return parts.length == 1
-        ? parts[0][0].toUpperCase()
-        : (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-
-  Future<void> _refreshAll() async {
-    await _loadBudgetsSeparately();
-    await _loadExpensesSeparately();
-  }
-
-  Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Confirm Logout"),
-        content: const Text("Are you sure you want to sign out?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("No"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text("Yes"),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      // 🔥 IMPORTANT FIX
-      await DatabaseHelper.instance.clearAllTables();
-
-      await supabase.auth.signOut();
-
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
-    }
-  }
-
+  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -251,7 +255,6 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
         ],
       ),
-
       body: RefreshIndicator(
         onRefresh: _refreshAll,
         child: Column(
@@ -262,181 +265,177 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     const SizedBox(height: 12),
-
-                    // Total Remaining
-                    Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: ListTile(
-                        leading: const Icon(Icons.savings, size: 32),
-                        title: Text(
-                          "Total Remaining • ${currentMonthYear()}",
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          "₹ ${_totalRemaining.toStringAsFixed(2)}",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _amountColor(_totalRemaining),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Expense Breakdown",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            _buildExpensePieChart(),
-                            const SizedBox(height: 12),
-                            _buildPieLegend(),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    Row(
-                      children: [
-                        _buildRemainingCard(
-                          title: "Cash Remaining",
-                          icon: Icons.money,
-                          amount: _cashRemaining,
-                          progress: _cashProgress,
-                          percentText: _formatPercent(
-                            _cashExpense,
-                            _cashBudget,
-                          ),
-                          color: Colors.green,
-                          margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                        ),
-                        _buildRemainingCard(
-                          title: "Online Remaining",
-                          icon: Icons.account_balance_wallet_outlined,
-                          amount: _onlineRemaining,
-                          progress: _onlineProgress,
-                          percentText: _formatPercent(
-                            _onlineExpense,
-                            _onlineBudget,
-                          ),
-                          color: Colors.blue,
-                          margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-                        ),
-                      ],
-                    ),
+                    _buildTotalRemainingCard(),
+                    _buildPieCard(),
+                    _buildRemainingRow(),
                   ],
                 ),
               ),
             ),
+            _buildBottomButtons(),
+          ],
+        ),
+      ),
+      drawer: _buildDrawer(),
+    );
+  }
 
-            // Bottom buttons
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text("Add Expense"),
-                        onPressed: () async {
-                          await Navigator.pushNamed(context, '/add_expense');
-                          _loadExpensesSeparately();
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.account_balance_wallet),
-                        label: const Text("Add Budget"),
-                        onPressed: () async {
-                          await Navigator.pushNamed(context, '/budget');
-                          _loadBudgetsSeparately();
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+  // ---------------- UI Parts ----------------
+  Widget _buildTotalRemainingCard() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: const Icon(Icons.savings, size: 32),
+        title: Text(
+          "Total Remaining • ${currentMonthYear()}",
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          "₹ ${_totalRemaining.toStringAsFixed(2)}",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: _amountColor(_totalRemaining),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPieCard() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Expense Breakdown",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            _buildExpensePieChart(),
+            const SizedBox(height: 12),
+            _buildPieLegend(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRemainingRow() {
+    return Row(
+      children: [
+        _buildRemainingCard(
+          title: "Cash Remaining",
+          icon: Icons.money,
+          amount: _cashRemaining,
+          progress: _cashProgress,
+          percentText: _formatPercent(_cashExpense, _cashBudget),
+          color: Colors.green,
+          margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        ),
+        _buildRemainingCard(
+          title: "Online Remaining",
+          icon: Icons.account_balance_wallet_outlined,
+          amount: _onlineRemaining,
+          progress: _onlineProgress,
+          percentText: _formatPercent(_onlineExpense, _onlineBudget),
+          color: Colors.blue,
+          margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomButtons() {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text("Add Expense"),
+                onPressed: () async {
+                  await Navigator.pushNamed(context, '/add_expense');
+                  _loadExpensesSeparately();
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text("Add Budget"),
+                onPressed: () async {
+                  await Navigator.pushNamed(context, '/budget');
+                  _loadBudgetsSeparately();
+                },
               ),
             ),
           ],
         ),
       ),
+    );
+  }
 
-      drawer: Drawer(
-        child: SafeArea(
-          child: ListView(
-            children: [
-              DrawerHeader(
-                decoration: const BoxDecoration(color: Colors.blue),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: Colors.white,
-                      child: Text(
-                        getInitials(_username),
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _username,
+  Drawer _buildDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Colors.blue),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 36,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      getInitials(_username),
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: Colors.blue,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      _useremail,
-                      style: const TextStyle(color: Colors.white70),
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _username,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    _useremail,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
-              _drawerItem(Icons.person, "My Profile", '/profiles'),
-              _drawerItem(Icons.info, "About Us", '/about'),
-              _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
-              _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
-              _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text("Sign Out"),
-                onTap: _logout,
-              ),
-            ],
-          ),
+            ),
+            _drawerItem(Icons.person, "My Profile", '/profiles'),
+            _drawerItem(Icons.info, "About Us", '/about'),
+            _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
+            _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+            _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text("Sign Out"),
+              onTap: _logout,
+            ),
+          ],
         ),
       ),
     );

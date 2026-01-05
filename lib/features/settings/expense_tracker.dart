@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,6 +22,11 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
   String _filterMode = 'All'; // All / Cash / Online
 
+  String _selectedMonth =
+      "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
+
+  List<String> _availableMonths = [];
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +41,22 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     } catch (_) {
       return false;
     }
+  }
+
+  //-----------------------Available Months Logid--------------------
+  void _buildAvailableMonths(List<Map<String, dynamic>> expenses) {
+    final months =
+        expenses
+            .map((e) => (e['date'] ?? '').toString().substring(0, 7))
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+
+    if (!_availableMonths.contains(_selectedMonth) && months.isNotEmpty) {
+      _selectedMonth = months.first;
+    }
+
+    _availableMonths = months;
   }
 
   // ---------------- LOAD EXPENSES ----------------
@@ -84,7 +106,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       // Offline
       _expenses = await DatabaseHelper.instance.getExpenses();
     }
-
+    _buildAvailableMonths(_expenses);
     setState(() => _isLoading = false);
   }
 
@@ -328,21 +350,26 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     return DateFormat('dd MMM yyyy').format(parsed);
   }
 
-  double get _totalCash => _expenses
+  double get _totalCash => _filteredExpenses
       .where((e) => (e['mode'] ?? '').toString().toLowerCase() == 'cash')
       .fold(0.0, (sum, e) => sum + (e['total'] as num).toDouble());
 
-  double get _totalOnline => _expenses
+  double get _totalOnline => _filteredExpenses
       .where((e) => (e['mode'] ?? '').toString().toLowerCase() == 'online')
       .fold(0.0, (sum, e) => sum + (e['total'] as num).toDouble());
 
   double get _grandTotal => _totalCash + _totalOnline;
 
   List<Map<String, dynamic>> get _filteredExpenses {
-    if (_filterMode == 'All') return _expenses;
     return _expenses.where((e) {
-      return (e['mode'] ?? '').toString().toLowerCase() ==
-          _filterMode.toLowerCase();
+      final date = (e['date'] ?? '').toString();
+      final matchesMonth = date.startsWith(_selectedMonth);
+
+      if (_filterMode == 'All') return matchesMonth;
+
+      return matchesMonth &&
+          (e['mode'] ?? '').toString().toLowerCase() ==
+              _filterMode.toLowerCase();
     }).toList();
   }
 
@@ -356,6 +383,51 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
     final keys = map.keys.toList()..sort((a, b) => b.compareTo(a));
     return {for (final k in keys) k: map[k]!};
+  }
+
+  //-----------PIE CHART FOR EXPENSE TRACKER------------------
+  Widget _buildExpensePieChart() {
+    final total = _grandTotal;
+
+    if (total <= 0) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          "No expenses for this month",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 200,
+      child: PieChart(
+        PieChartData(
+          centerSpaceRadius: 40,
+          sectionsSpace: 2,
+          sections: [
+            PieChartSectionData(
+              value: _totalCash,
+              color: Colors.green,
+              title: "${((_totalCash / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            PieChartSectionData(
+              value: _totalOnline,
+              color: Colors.blue,
+              title: "${((_totalOnline / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ---------------- DELETE ----------------
@@ -453,12 +525,40 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     return result ?? false;
   }
 
+  //------------PIE CHART LEGEND LOGIC------------
+  Widget _buildPieLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _legendItem(Colors.green, "Cash"),
+        const SizedBox(width: 16),
+        _legendItem(Colors.blue, "Online"),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
+  }
+
   // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Expense Tracker'),
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.blue,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadExpenses),
         ],
@@ -467,6 +567,39 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_availableMonths.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    child: DropdownButtonFormField<String>(
+                      value: _availableMonths.contains(_selectedMonth)
+                          ? _selectedMonth
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: "Select Month",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.calendar_month),
+                      ),
+                      items: _availableMonths
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m,
+                              child: Text(
+                                DateFormat(
+                                  'MMMM yyyy',
+                                ).format(DateTime.parse('$m-01')),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedMonth = value);
+                        }
+                      },
+                    ),
+                  ),
+                _buildExpensePieChart(),
+                _buildPieLegend(),
                 Card(
                   margin: const EdgeInsets.all(12),
                   child: Padding(
