@@ -164,4 +164,18 @@ class DatabaseHelper {
     await db.delete('expenses');
     await db.delete('budget');
   }
+
+  //---------------- Recent Travel Expense ----------------------
+  Future<List<Map<String, dynamic>>> getRecentTravelExpenses({
+    int limit = 5,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'expenses',
+      where: 'category = ?',
+      whereArgs: ['Travel'],
+      orderBy: 'date DESC',
+      limit: limit,
+    );
+  }
 }
