@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -22,6 +24,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _username = '';
   String _useremail = '';
+
+  //Tour Storage
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _homeTourKey = "WalletWatch_home_tour_done";
+  // Showcase Keys
+  final GlobalKey _totalRemainingKey = GlobalKey();
+  final GlobalKey _pieKey = GlobalKey();
+  final GlobalKey _cashKey = GlobalKey();
+  final GlobalKey _onlineKey = GlobalKey();
+  final GlobalKey _addExpenseKey = GlobalKey();
+  final GlobalKey _addBudgetKey = GlobalKey();
+  final GlobalKey _refreshKey = GlobalKey();
 
   final supabase = Supabase.instance.client;
 
@@ -53,6 +67,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUserInfo();
     _loadExpensesSeparately();
     _loadBudgetsSeparately();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startTourIfFirstTime();
+    });
   }
 
   // ---------------- Loaders ----------------
@@ -72,6 +89,30 @@ class _HomeScreenState extends State<HomeScreen> {
         _useremail = response['email'] ?? '';
       });
     }
+  }
+
+  //-------------Tour function-----------------
+  Future<void> _startTourIfFirstTime() async {
+    final done = await _secureStorage.read(key: _homeTourKey);
+
+    if (done == "true") return;
+
+    // small delay so UI builds perfectly
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    if (!mounted) return;
+
+    ShowCaseWidget.of(context).startShowCase([
+      _totalRemainingKey,
+      _pieKey,
+      _cashKey,
+      _onlineKey,
+      _addExpenseKey,
+      _addBudgetKey,
+      _refreshKey,
+    ]);
+
+    await _secureStorage.write(key: _homeTourKey, value: "true");
   }
 
   Future<void> _loadExpensesSeparately() async {
@@ -252,7 +293,23 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(onPressed: _refreshAll, icon: const Icon(Icons.refresh)),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              ShowCaseWidget.of(context).startShowCase([
+                _totalRemainingKey,
+                _pieKey,
+                _cashKey,
+                _onlineKey,
+                _addExpenseKey,
+                _addBudgetKey,
+              ]);
+            },
+          ),
+          // IconButton(
+          //   icon: const Icon(Icons.refresh),
+          //   onPressed: _refreshAll,
+          // ),
         ],
       ),
       body: RefreshIndicator(
@@ -282,20 +339,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ---------------- UI Parts ----------------
   Widget _buildTotalRemainingCard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ListTile(
-        leading: const Icon(Icons.savings, size: 32),
-        title: Text(
-          "Total Remaining • ${currentMonthYear()}",
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          "₹ ${_totalRemaining.toStringAsFixed(2)}",
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: _amountColor(_totalRemaining),
+    return Showcase(
+      key: _totalRemainingKey,
+      description: "This is your total remaining money for this month 💰",
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: ListTile(
+          leading: const Icon(Icons.savings, size: 32),
+          title: Text(
+            "Total Remaining • ${currentMonthYear()}",
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            "₹ ${_totalRemaining.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _amountColor(_totalRemaining),
+            ),
           ),
         ),
       ),
@@ -303,24 +364,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPieCard() {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Expense Breakdown",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            _buildExpensePieChart(),
-            const SizedBox(height: 12),
-            _buildPieLegend(),
-          ],
+    return Showcase(
+      key: _pieKey,
+      description: "This chart shows Cash vs Online expenses 📊",
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Expense Breakdown",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              _buildExpensePieChart(),
+              const SizedBox(height: 12),
+              _buildPieLegend(),
+            ],
+          ),
         ),
       ),
     );
@@ -329,23 +394,35 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildRemainingRow() {
     return Row(
       children: [
-        _buildRemainingCard(
-          title: "Cash Remaining",
-          icon: Icons.money,
-          amount: _cashRemaining,
-          progress: _cashProgress,
-          percentText: _formatPercent(_cashExpense, _cashBudget),
-          color: Colors.green,
-          margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        Expanded(
+          child: Showcase(
+            key: _cashKey,
+            description: "This shows your remaining Cash budget 💵",
+            child: _buildRemainingCard(
+              title: "Cash Remaining",
+              icon: Icons.money,
+              amount: _cashRemaining,
+              progress: _cashProgress,
+              percentText: _formatPercent(_cashExpense, _cashBudget),
+              color: Colors.green,
+              margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            ),
+          ),
         ),
-        _buildRemainingCard(
-          title: "Online Remaining",
-          icon: Icons.account_balance_wallet_outlined,
-          amount: _onlineRemaining,
-          progress: _onlineProgress,
-          percentText: _formatPercent(_onlineExpense, _onlineBudget),
-          color: Colors.blue,
-          margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+        Expanded(
+          child: Showcase(
+            key: _onlineKey,
+            description: "This shows your remaining Online budget 🏦",
+            child: _buildRemainingCard(
+              title: "Online Remaining",
+              icon: Icons.account_balance_wallet_outlined,
+              amount: _onlineRemaining,
+              progress: _onlineProgress,
+              percentText: _formatPercent(_onlineExpense, _onlineBudget),
+              color: Colors.blue,
+              margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+            ),
+          ),
         ),
       ],
     );
@@ -358,27 +435,35 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text("Add Expense"),
-                onPressed: () async {
-                  await Navigator.pushNamed(context, '/add_expense');
-                  _loadExpensesSeparately();
-                },
+            Showcase(
+              key: _addExpenseKey,
+              description: "Tap here to add a new expense ➕",
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add Expense"),
+                  onPressed: () async {
+                    await Navigator.pushNamed(context, '/add_expense');
+                    _loadExpensesSeparately();
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.account_balance_wallet),
-                label: const Text("Add Budget"),
-                onPressed: () async {
-                  await Navigator.pushNamed(context, '/budget');
-                  _loadBudgetsSeparately();
-                },
+            Showcase(
+              key: _addBudgetKey,
+              description: "Tap here to add your monthly budget 💳",
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.account_balance_wallet),
+                  label: const Text("Add Budget"),
+                  onPressed: () async {
+                    await Navigator.pushNamed(context, '/budget');
+                    _loadBudgetsSeparately();
+                  },
+                ),
               ),
             ),
           ],
