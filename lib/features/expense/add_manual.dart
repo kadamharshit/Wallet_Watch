@@ -6,6 +6,7 @@ import 'package:walletwatch/services/expense_database.dart';
 import 'package:uuid/uuid.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:walletwatch/features/expense/scan_receipt.dart';
 
 class AddManualExpense extends StatefulWidget {
   const AddManualExpense({super.key});
@@ -457,6 +458,49 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     );
   }
 
+  Future<void> _openReceiptScan() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScanReceiptPage()),
+    );
+
+    if (result == null) return;
+
+    setState(() {
+      // Fill shop name
+      _shopController.text = (result["shop"] ?? "").toString();
+
+      // Fill date (only if OCR found)
+      final scannedDate = (result["date"] ?? "").toString();
+      if (scannedDate.isNotEmpty && scannedDate != "-") {
+        _selectedDate = scannedDate;
+      }
+
+      // Fill total (only if OCR found)
+      final scannedTotal = (result["total"] ?? "").toString();
+      final parsedTotal = double.tryParse(scannedTotal);
+      if (parsedTotal != null && parsedTotal > 0) {
+        total = parsedTotal;
+
+        // if items section not opened yet, open it
+        _showItemsSection = true;
+
+        // add one item row as placeholder so it saves properly
+        itemInputs = [
+          {
+            "name": "Scanned Receipt",
+            "qty": "1",
+            "amount": parsedTotal.toStringAsFixed(2),
+          },
+        ];
+      }
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Receipt data filled ✅")));
+  }
+
   // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
@@ -655,6 +699,16 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openReceiptScan,
+                  icon: const Icon(Icons.document_scanner),
+                  label: const Text("Scan Receipt"),
+                ),
+              ),
 
               // ✅ Recent Travel Chips (only for Travel category)
               if (_selectedCategory == 'Travel' &&
@@ -753,6 +807,12 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   ),
                 ),
               ),
+
+              // ElevatedButton.icon(
+              //   onPressed: () => Navigator.pushNamed(context, "/scan_receipt"),
+              //   icon: const Icon(Icons.document_scanner),
+              //   label: const Text("Scan Receipt"),
+              // ),
             ],
           ),
         ),
