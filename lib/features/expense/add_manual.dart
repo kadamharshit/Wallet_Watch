@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:uuid/uuid.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AddManualExpense extends StatefulWidget {
   const AddManualExpense({super.key});
@@ -49,12 +51,57 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   final _travelDestController = TextEditingController();
   final _travelAmountController = TextEditingController();
 
+  // ✅ Showcase keys
+  final GlobalKey _dateKey = GlobalKey();
+  final GlobalKey _categoryKey = GlobalKey();
+  final GlobalKey _paymentKey = GlobalKey();
+  final GlobalKey _bankKey = GlobalKey();
+  final GlobalKey _shopKey = GlobalKey();
+  final GlobalKey _itemsKey = GlobalKey();
+  final GlobalKey _saveKey = GlobalKey();
+
+  // ✅ tour storage
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _addExpenseTourDoneKey =
+      "walletwatch_add_expense_tour_done";
+
   @override
   void initState() {
     super.initState();
     _fetchAvailableBanks();
     _syncPendingExpenses();
     _loadRecentTravels();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startAddExpenseTourOnlyOnce();
+    });
+  }
+
+  Future<void> _startAddExpenseTourOnlyOnce() async {
+    final done = await _secureStorage.read(key: _addExpenseTourDoneKey);
+    if (done == "true") return;
+
+    if (!mounted) return;
+
+    // ✅ Ensure items section exists before tour starts
+    setState(() {
+      _showItemsSection = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    if (!mounted) return;
+
+    ShowCaseWidget.of(context).startShowCase([
+      _dateKey,
+      _categoryKey,
+      _paymentKey,
+      _shopKey,
+      _itemsKey,
+      _saveKey,
+    ]);
+
+    await _secureStorage.write(key: _addExpenseTourDoneKey, value: "true");
   }
 
   // ---------------- NETWORK ----------------
@@ -422,6 +469,16 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         ),
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              ShowCaseWidget.of(
+                context,
+              ).startShowCase([_dateKey, _categoryKey, _paymentKey, _shopKey]);
+            },
+          ),
+        ],
         elevation: 0,
       ),
       body: Padding(
@@ -431,27 +488,31 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           child: ListView(
             children: [
               // ✅ Date + Shop
-              _sectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Date",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: _pickDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Date',
-                          border: OutlineInputBorder(),
-                        ),
-                        child: Text(_selectedDate ?? 'Select date'),
+              Showcase(
+                key: _dateKey,
+                description: "Select the expense date 📅",
+                child: _sectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Date",
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: _pickDate,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Date',
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Text(_selectedDate ?? 'Select date'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
               ),
               // ✅ Category + Payment
@@ -465,86 +526,133 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField(
-                      value: _selectedCategory,
-                      items: _categories
-                          .map(
-                            (c) => DropdownMenuItem(value: c, child: Text(c)),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategory = value!;
-                          itemInputs = [{}];
-                          total = 0.0;
-                          _showItemsSection = true;
-                        });
-                      },
-                      decoration: const InputDecoration(labelText: 'Category'),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField(
-                      value: _selectedPaymentMode,
-                      items: _paymentModes
-                          .map(
-                            (mode) => DropdownMenuItem(
-                              value: mode,
-                              child: Text(mode),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedPaymentMode = value!;
-                          _showItemsSection = true;
-                        });
-                      },
-                      decoration: const InputDecoration(labelText: 'Paid By'),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_selectedPaymentMode == 'Online' &&
-                        _availableBanks.isNotEmpty)
-                      DropdownButtonFormField<String>(
-                        value: _selectedBank,
-                        items: _availableBanks
+                    Showcase(
+                      key: _categoryKey,
+                      description:
+                          "Choose expense category like Grocery, Travel, Food etc.",
+                      child: DropdownButtonFormField(
+                        value: _selectedCategory,
+                        items: _categories
                             .map(
-                              (bank) => DropdownMenuItem(
-                                value: bank,
-                                child: Text(bank),
-                              ),
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
                             )
                             .toList(),
-                        onChanged: (val) {
+                        onChanged: (value) {
                           setState(() {
-                            _selectedBank = val;
+                            _selectedCategory = value!;
+                            total = 0.0;
+                            _showItemsSection = true;
+
+                            if (_selectedCategory == 'Travel') {
+                              itemInputs = [
+                                {
+                                  "mode": "",
+                                  "start": "",
+                                  "destination": "",
+                                  "amount": "",
+                                },
+                              ];
+
+                              // clear controllers too
+                              _travelModeController.clear();
+                              _travelStartController.clear();
+                              _travelDestController.clear();
+                              _travelAmountController.clear();
+                            } else {
+                              itemInputs = [{}];
+                            }
                           });
                         },
                         decoration: const InputDecoration(
-                          labelText: 'Select Bank',
+                          labelText: 'Category',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Showcase(
+                      key: _paymentKey,
+                      description: "Select how you paid: Cash or Online 💳",
+                      child: DropdownButtonFormField(
+                        value: _selectedPaymentMode,
+                        items: _paymentModes
+                            .map(
+                              (mode) => DropdownMenuItem(
+                                value: mode,
+                                child: Text(mode),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedPaymentMode = value!;
+                            _showItemsSection = true;
+                          });
+                          if (_selectedPaymentMode == "Online") {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              ShowCaseWidget.of(
+                                context,
+                              ).startShowCase([_bankKey]);
+                            });
+                          }
+                        },
+                        decoration: const InputDecoration(labelText: 'Paid By'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (_selectedPaymentMode == 'Online' &&
+                        _availableBanks.isNotEmpty)
+                      Showcase(
+                        key: _bankKey,
+                        description:
+                            "Select the bank used for this online payment 🏦",
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedBank,
+                          items: _availableBanks
+                              .map(
+                                (bank) => DropdownMenuItem(
+                                  value: bank,
+                                  child: Text(bank),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            setState(() {
+                              _selectedBank = val;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            labelText: 'Select Bank',
+                          ),
                         ),
                       ),
                   ],
                 ),
               ),
               const SizedBox(height: 10),
-              _sectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Shop Name/Type",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _shopController,
-                      decoration: const InputDecoration(
-                        labelText: 'Shop Name / Type',
+              Showcase(
+                key: _shopKey,
+                description:
+                    "Enter shop name/type (ex: Dmart, Medical, Restaurant)",
+                child: _sectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Shop Name/Type",
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Enter shop name' : null,
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _shopController,
+                        decoration: const InputDecoration(
+                          labelText: 'Shop Name / Type',
+                        ),
+                        validator: (value) =>
+                            value!.isEmpty ? 'Enter shop name' : null,
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -572,60 +680,76 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               // ✅ Items Section (shows after selection)
               if (_showItemsSection) ...[
                 const SizedBox(height: 10),
-                _sectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Items",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      ...List.generate(
-                        itemInputs.length,
-                        (index) => _buildItemFields(index),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
+                Showcase(
+                  key: _itemsKey,
+                  description:
+                      "Add item details and WalletWatch will calculate total automatically ✅",
+                  child: _sectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Items",
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        child: Row(
-                          children: [
-                            const Text('Total', style: TextStyle(fontSize: 16)),
-                            const Spacer(),
-                            Text(
-                              "₹${total.toStringAsFixed(2)}",
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                        const SizedBox(height: 8),
+                        ...List.generate(
+                          itemInputs.length,
+                          (index) => _buildItemFields(index),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Total',
+                                style: TextStyle(fontSize: 16),
                               ),
-                            ),
-                          ],
+                              const Spacer(),
+                              Text(
+                                "₹${total.toStringAsFixed(2)}",
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      ElevatedButton.icon(
-                        onPressed: _addItem,
-                        icon: const Icon(Icons.add),
-                        label: const Text("Add Another Item"),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        if (_selectedCategory != 'Travel')
+                          ElevatedButton.icon(
+                            onPressed: _addItem,
+                            icon: const Icon(Icons.add),
+                            label: const Text("Add Another Item"),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
 
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _saveExpense,
-                  child: const Text(
-                    "Save Expense",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              Showcase(
+                key: _saveKey,
+                description: "Finally tap here to save the expense ✅",
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _saveExpense,
+                    child: const Text(
+                      "Save Expense",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -1,7 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class HowToUse extends StatelessWidget {
   const HowToUse({super.key});
+
+  Future<void> _replayHomeTour(BuildContext context) async {
+    const storage = FlutterSecureStorage();
+    await storage.delete(key: "walletwatch_home_tour_done");
+
+    if (context.mounted) {
+      Navigator.pop(context);
+      Navigator.pushReplacementNamed(context, "/home");
+    }
+  }
+
+  Future<void> _replayAddExpenseTour(BuildContext context) async {
+    const storage = FlutterSecureStorage();
+    await storage.delete(key: "walletwatch_add_expense_tour_done");
+
+    if (context.mounted) {
+      Navigator.pop(context);
+      Navigator.pushReplacementNamed(context, "/add_expense");
+    }
+  }
+
+  Future<void> _replayAddBudgetTour(BuildContext context) async {
+    const storage = FlutterSecureStorage();
+    await storage.delete(key: "walletwatch_add_budget_tour_done");
+
+    if (context.mounted) {
+      Navigator.pop(context);
+      Navigator.pushReplacementNamed(context, "/budget");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +74,6 @@ class HowToUse extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
 
             // -------- Steps --------

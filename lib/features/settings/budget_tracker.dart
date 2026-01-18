@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class BudgetTracker extends StatefulWidget {
   const BudgetTracker({super.key});
@@ -23,10 +25,28 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
 
+  final GlobalKey _monthKey = GlobalKey();
+  final GlobalKey _chartKey = GlobalKey();
+  final GlobalKey _summaryKey = GlobalKey();
+  final GlobalKey _filterKey = GlobalKey();
+  final GlobalKey _listKey = GlobalKey();
+
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _budgetTrackerTourDoneKey =
+      "walletwatch_budget_tracker_tour_done";
+
   @override
   void initState() {
     super.initState();
     _loadBudgetsForMonth(_selectedMonth);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startBudgetTrackerTourOnlyOnce();
+    });
+  }
+
+  Future<void> _refreshBudgets() async {
+    await _loadBudgetsForMonth(_selectedMonth);
   }
 
   // List<String> _getAvailableMonths() {
@@ -38,6 +58,23 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   //   months.sort((a, b) => b.compareTo(a)); // latest first
   //   return months;
   // }
+
+  Future<void> _startBudgetTrackerTourOnlyOnce() async {
+    final done = await _secureStorage.read(key: _budgetTrackerTourDoneKey);
+    if (done == "true") return;
+
+    if (!mounted) return;
+
+    // small delay so UI loads nicely
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+
+    ShowCaseWidget.of(
+      context,
+    ).startShowCase([_monthKey, _chartKey, _summaryKey, _filterKey, _listKey]);
+
+    await _secureStorage.write(key: _budgetTrackerTourDoneKey, value: "true");
+  }
 
   // ---------------- LOAD ----------------
   Future<void> _loadBudgetsForMonth(String month) async {
@@ -395,74 +432,112 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         title: const Text("Budget Tracker"),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month),
-                const SizedBox(width: 8),
-
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedMonth,
-                    decoration: const InputDecoration(
-                      labelText: "Select Month",
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _availableMonths
-                        .map(
-                          (m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(
-                              DateFormat(
-                                'MMMM yyyy',
-                              ).format(DateTime.parse('$m-01')),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _selectedMonth = value);
-                        _loadBudgetsForMonth(value);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _buildBudgetPieChart(),
-          _buildPieLegend(),
-          _buildSummary(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Wrap(
-              spacing: 8,
-              children: ['All', 'Cash', 'Online']
-                  .map(
-                    (m) => ChoiceChip(
-                      label: Text(m),
-                      selected: _filterMode == m,
-                      onSelected: (_) => setState(() => _filterMode = m),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: list.isEmpty
-                ? const Center(child: Text("No budget entries found"))
-                : ListView.builder(
-                    itemCount: list.length,
-                    itemBuilder: (_, i) => _buildBudgetCard(list[i]),
-                  ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              ShowCaseWidget.of(context).startShowCase([
+                _monthKey,
+                _chartKey,
+                _summaryKey,
+                _filterKey,
+                _listKey,
+              ]);
+            },
           ),
         ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshBudgets,
+        child: Column(
+          children: [
+            Showcase(
+              key: _monthKey,
+              description: "Select month to view budgets for that month 📅",
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month),
+                    const SizedBox(width: 8),
+
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedMonth,
+                        decoration: const InputDecoration(
+                          labelText: "Select Month",
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _availableMonths
+                            .map(
+                              (m) => DropdownMenuItem(
+                                value: m,
+                                child: Text(
+                                  DateFormat(
+                                    'MMMM yyyy',
+                                  ).format(DateTime.parse('$m-01')),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => _selectedMonth = value);
+                            _loadBudgetsForMonth(value);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Showcase(
+              key: _chartKey,
+              description: "This chart shows Cash vs Online budget split 📊",
+              child: _buildBudgetPieChart(),
+            ),
+            _buildPieLegend(),
+            Showcase(
+              key: _summaryKey,
+              description:
+                  "This shows total budget, cash total & online total ✅",
+              child: _buildSummary(),
+            ),
+            Showcase(
+              key: _filterKey,
+              description: "Filter budget entries by mode: All / Cash / Online",
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Wrap(
+                  spacing: 8,
+                  children: ['All', 'Cash', 'Online']
+                      .map(
+                        (m) => ChoiceChip(
+                          label: Text(m),
+                          selected: _filterMode == m,
+                          onSelected: (_) => setState(() => _filterMode = m),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Showcase(
+                key: _listKey,
+                description: "Swipe cards to Edit or Delete budget entries 🧾",
+                child: list.isEmpty
+                    ? const Center(child: Text("No budget entries found"))
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) => _buildBudgetCard(list[i]),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/features/expense/edit_expense.dart';
 import 'package:walletwatch/services/expense_database.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ExpenseTracker extends StatefulWidget {
   const ExpenseTracker({super.key});
@@ -27,10 +29,38 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
   List<String> _availableMonths = [];
 
+  // ✅ Showcase Keys
+  final GlobalKey _monthKey = GlobalKey();
+  final GlobalKey _chartKey = GlobalKey();
+  final GlobalKey _summaryKey = GlobalKey();
+  final GlobalKey _filterKey = GlobalKey();
+  final GlobalKey _listKey = GlobalKey();
+
+  // ✅ Tour storage
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _expenseTrackerTourDoneKey =
+      "walletwatch_expense_tracker_tour_done";
+
   @override
   void initState() {
     super.initState();
     _loadExpenses();
+  }
+
+  Future<void> _startExpenseTrackerTourOnlyOnce() async {
+    final done = await _secureStorage.read(key: _expenseTrackerTourDoneKey);
+    if (done == "true") return;
+
+    if (!mounted) return;
+
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+
+    ShowCaseWidget.of(
+      context,
+    ).startShowCase([_monthKey, _chartKey, _summaryKey, _filterKey, _listKey]);
+
+    await _secureStorage.write(key: _expenseTrackerTourDoneKey, value: "true");
   }
 
   // ---------------- INTERNET ----------------
@@ -41,6 +71,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> _refreshExpenses() async {
+    await _loadExpenses();
   }
 
   //-----------------------Available Months Logid--------------------
@@ -108,6 +142,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     }
     _buildAvailableMonths(_expenses);
     setState(() => _isLoading = false);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startExpenseTrackerTourOnlyOnce();
+    });
   }
 
   //-----------------------INFO CARD WIDGET---------------------
@@ -560,196 +598,245 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadExpenses),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              ShowCaseWidget.of(context).startShowCase([
+                _monthKey,
+                _chartKey,
+                _summaryKey,
+                _filterKey,
+                _listKey,
+              ]);
+            },
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                if (_availableMonths.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                    child: DropdownButtonFormField<String>(
-                      value: _availableMonths.contains(_selectedMonth)
-                          ? _selectedMonth
-                          : null,
-                      decoration: const InputDecoration(
-                        labelText: "Select Month",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_month),
-                      ),
-                      items: _availableMonths
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m,
-                              child: Text(
-                                DateFormat(
-                                  'MMMM yyyy',
-                                ).format(DateTime.parse('$m-01')),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _selectedMonth = value);
-                        }
-                      },
-                    ),
-                  ),
-                _buildExpensePieChart(),
-                _buildPieLegend(),
-                Card(
-                  margin: const EdgeInsets.all(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Total: ₹${_grandTotal.toStringAsFixed(2)}",
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+      body: RefreshIndicator(
+        onRefresh: _refreshExpenses,
+        child: _isLoading
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 300),
+                  Center(child: CircularProgressIndicator()),
+                ],
+              )
+            : Column(
+                children: [
+                  if (_availableMonths.isNotEmpty)
+                    Showcase(
+                      key: _monthKey,
+                      description:
+                          "Select month to see expenses for that month 📅",
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                        child: DropdownButtonFormField<String>(
+                          value: _availableMonths.contains(_selectedMonth)
+                              ? _selectedMonth
+                              : null,
+                          decoration: const InputDecoration(
+                            labelText: "Select Month",
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.calendar_month),
                           ),
+                          items: _availableMonths
+                              .map(
+                                (m) => DropdownMenuItem(
+                                  value: m,
+                                  child: Text(
+                                    DateFormat(
+                                      'MMMM yyyy',
+                                    ).format(DateTime.parse('$m-01')),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _selectedMonth = value);
+                            }
+                          },
                         ),
-                        Row(
-                          children: [
-                            Text("Cash: ₹${_totalCash.toStringAsFixed(2)}"),
-                            const Spacer(),
-                            Text("Online: ₹${_totalOnline.toStringAsFixed(2)}"),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('All'),
-                              selected: _filterMode == 'All',
-                              onSelected: (_) =>
-                                  setState(() => _filterMode = 'All'),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Cash'),
-                              selected: _filterMode == 'Cash',
-                              onSelected: (_) =>
-                                  setState(() => _filterMode = 'Cash'),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Online'),
-                              selected: _filterMode == 'Online',
-                              onSelected: (_) =>
-                                  setState(() => _filterMode = 'Online'),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
+                  Showcase(
+                    key: _chartKey,
+                    description: "Shows Cash vs Online expense split 📊",
+                    child: _buildExpensePieChart(),
                   ),
-                ),
-                Expanded(
-                  child: ListView(
-                    children: _groupedByDate.entries.map((entry) {
-                      final dateTotal = entry.value.fold<double>(
-                        0,
-                        (sum, e) => sum + (e['total'] as num).toDouble(),
-                      );
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(
-                              "${_formatDate(entry.key)} • ₹${dateTotal.toStringAsFixed(2)}",
+                  _buildPieLegend(),
+                  Showcase(
+                    key: _summaryKey,
+                    description:
+                        "This shows total, cash and online spending for the month ✅",
+                    child: Card(
+                      margin: const EdgeInsets.all(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Total: ₹${_grandTotal.toStringAsFixed(2)}",
                               style: const TextStyle(
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                          ...entry.value.map((e) {
-                            return Dismissible(
-                              key: ValueKey(e['uuid']),
-                              direction: DismissDirection.horizontal,
-
-                              // 👉 EDIT (Swipe right)
-                              background: Container(
-                                color: Colors.blue,
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.only(left: 16),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.edit, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Edit',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                            Row(
+                              children: [
+                                Text("Cash: ₹${_totalCash.toStringAsFixed(2)}"),
+                                const Spacer(),
+                                Text(
+                                  "Online: ₹${_totalOnline.toStringAsFixed(2)}",
                                 ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Showcase(
+                              key: _filterKey,
+                              description:
+                                  "Filter expenses by payment mode: All / Cash / Online",
+                              child: Wrap(
+                                spacing: 8,
+                                children: [
+                                  ChoiceChip(
+                                    label: const Text('All'),
+                                    selected: _filterMode == 'All',
+                                    onSelected: (_) =>
+                                        setState(() => _filterMode = 'All'),
+                                  ),
+                                  ChoiceChip(
+                                    label: const Text('Cash'),
+                                    selected: _filterMode == 'Cash',
+                                    onSelected: (_) =>
+                                        setState(() => _filterMode = 'Cash'),
+                                  ),
+                                  ChoiceChip(
+                                    label: const Text('Online'),
+                                    selected: _filterMode == 'Online',
+                                    onSelected: (_) =>
+                                        setState(() => _filterMode = 'Online'),
+                                  ),
+                                ],
                               ),
-
-                              // 👉 DELETE (Swipe left)
-                              secondaryBackground: Container(
-                                color: Colors.red,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 16),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'Delete',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Icon(Icons.delete, color: Colors.white),
-                                  ],
-                                ),
-                              ),
-
-                              confirmDismiss: (direction) async {
-                                if (direction == DismissDirection.startToEnd) {
-                                  // 🟦 EDIT
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          EditExpensePage(expense: e),
-                                    ),
-                                  );
-                                  await _loadExpenses();
-                                  return false;
-                                }
-
-                                if (direction == DismissDirection.endToStart) {
-                                  final confirm = await _confirmDeleteDialog();
-                                  if (confirm) {
-                                    await _deleteExpense(e);
-                                  }
-                                  return confirm;
-                                }
-
-                                return false;
-                              },
-
-                              child: _buildExpenseCard(e),
-                            );
-                          }),
-                        ],
-                      );
-                    }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  Expanded(
+                    child: Showcase(
+                      key: _listKey,
+                      description:
+                          "Tap any expense to see details. Swipe to Edit/Delete 🧾",
+                      child: ListView(
+                        children: _groupedByDate.entries.map((entry) {
+                          final dateTotal = entry.value.fold<double>(
+                            0,
+                            (sum, e) => sum + (e['total'] as num).toDouble(),
+                          );
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(
+                                  "${_formatDate(entry.key)} • ₹${dateTotal.toStringAsFixed(2)}",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              ...entry.value.map((e) {
+                                return Dismissible(
+                                  key: ValueKey(e['uuid']),
+                                  direction: DismissDirection.horizontal,
+
+                                  // 👉 EDIT (Swipe right)
+                                  background: Container(
+                                    color: Colors.blue,
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.only(left: 16),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.edit, color: Colors.white),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Edit',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 👉 DELETE (Swipe left)
+                                  secondaryBackground: Container(
+                                    color: Colors.red,
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 16),
+                                    child: const Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'Delete',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Icon(Icons.delete, color: Colors.white),
+                                      ],
+                                    ),
+                                  ),
+
+                                  confirmDismiss: (direction) async {
+                                    if (direction ==
+                                        DismissDirection.startToEnd) {
+                                      // 🟦 EDIT
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              EditExpensePage(expense: e),
+                                        ),
+                                      );
+                                      await _loadExpenses();
+                                      return false;
+                                    }
+
+                                    if (direction ==
+                                        DismissDirection.endToStart) {
+                                      final confirm =
+                                          await _confirmDeleteDialog();
+                                      if (confirm) {
+                                        await _deleteExpense(e);
+                                      }
+                                      return confirm;
+                                    }
+
+                                    return false;
+                                  },
+
+                                  child: _buildExpenseCard(e),
+                                );
+                              }),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }

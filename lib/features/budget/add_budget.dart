@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
+import 'package:showcaseview/showcaseview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AddBudget extends StatefulWidget {
   const AddBudget({super.key});
@@ -21,11 +23,43 @@ class _AddBudgetState extends State<AddBudget> {
 
   final List<Map<String, dynamic>> _bankInputs = [];
 
+  // ✅ Showcase Keys
+  final GlobalKey _dateKey = GlobalKey();
+  final GlobalKey _modeKey = GlobalKey();
+  final GlobalKey _cashAmountKey = GlobalKey();
+  final GlobalKey _onlineBanksKey = GlobalKey();
+  final GlobalKey _totalKey = GlobalKey();
+  final GlobalKey _saveKey = GlobalKey();
+
+  bool _onlineTourStarted = false;
+
+  // ✅ Tour storage
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _addBudgetTourDoneKey =
+      "walletwatch_add_budget_tour_done";
+
   @override
   void initState() {
     super.initState();
     _addBankField();
     _syncPendingBudgets();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startAddBudgetTourOnlyOnce();
+    });
+  }
+
+  Future<void> _startAddBudgetTourOnlyOnce() async {
+    final done = await _secureStorage.read(key: _addBudgetTourDoneKey);
+    if (done == "true") return;
+
+    if (!mounted) return;
+
+    ShowCaseWidget.of(
+      context,
+    ).startShowCase([_dateKey, _modeKey, _cashAmountKey, _saveKey]);
+
+    await _secureStorage.write(key: _addBudgetTourDoneKey, value: "true");
   }
 
   void _addBankField() {
@@ -241,51 +275,60 @@ class _AddBudgetState extends State<AddBudget> {
   }
 
   Widget _buildOnlineBankField() {
-    return Column(
-      children: [
-        ..._bankInputs.asMap().entries.map((entry) {
-          final index = entry.key;
-          final c = entry.value;
+    return Showcase(
+      key: _onlineBanksKey,
+      description: "Add bank name + amount. You can add multiple banks ✅",
+      child: Column(
+        children: [
+          ..._bankInputs.asMap().entries.map((entry) {
+            final index = entry.key;
+            final c = entry.value;
 
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: c['bank'],
-                      decoration: const InputDecoration(labelText: 'Bank Name'),
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: c['bank'],
+                        decoration: const InputDecoration(
+                          labelText: 'Bank Name',
+                        ),
+                      ),
                     ),
-                  ),
-                  if (_bankInputs.length > 1)
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _removeBankField(index),
-                    ),
-                ],
-              ),
-              TextFormField(
-                key: c['amountKey'],
-                controller: c['amount'],
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount'),
-                validator: (v) {
-                  final amt = double.tryParse(v ?? '');
-                  if (amt == null || amt <= 0) return 'Enter valid amount';
-                  return null;
-                },
-                onChanged: (_) => setState(() {}),
-              ),
-              const Divider(),
-            ],
-          );
-        }),
-        ElevatedButton.icon(
-          onPressed: _addBankField,
-          icon: const Icon(Icons.add),
-          label: const Text('Add Another Bank'),
-        ),
-      ],
+                    if (_bankInputs.length > 1)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        onPressed: () => _removeBankField(index),
+                      ),
+                  ],
+                ),
+                TextFormField(
+                  key: c['amountKey'],
+                  controller: c['amount'],
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                  validator: (v) {
+                    final amt = double.tryParse(v ?? '');
+                    if (amt == null || amt <= 0) return 'Enter valid amount';
+                    return null;
+                  },
+                  onChanged: (_) => setState(() {}),
+                ),
+                const Divider(),
+              ],
+            );
+          }),
+          ElevatedButton.icon(
+            onPressed: _addBankField,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Another Bank'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -294,8 +337,27 @@ class _AddBudgetState extends State<AddBudget> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Add Budget'),
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              ShowCaseWidget.of(context).startShowCase([
+                _dateKey,
+                _modeKey,
+                if (_mode == "Cash") _cashAmountKey,
+                if (_mode == "Online") _onlineBanksKey,
+                if (_mode == "Online") _totalKey,
+                _saveKey,
+              ]);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -306,29 +368,52 @@ class _AddBudgetState extends State<AddBudget> {
               _sectionCard(
                 child: Column(
                   children: [
-                    InkWell(
-                      onTap: _pickDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Date',
-                          border: OutlineInputBorder(),
+                    Showcase(
+                      key: _dateKey,
+                      description:
+                          "Select budget date (usually current month) 📅",
+                      child: InkWell(
+                        onTap: _pickDate,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Date',
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Text(_selectedDate ?? 'Select Date'),
                         ),
-                        child: Text(_selectedDate ?? 'Select Date'),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField(
-                      value: _mode,
-                      items: const [
-                        DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                        DropdownMenuItem(
-                          value: 'Online',
-                          child: Text('Online'),
+                    Showcase(
+                      key: _modeKey,
+                      description: "Choose budget type: Cash or Online 💰🏦",
+                      child: DropdownButtonFormField(
+                        value: _mode,
+                        items: const [
+                          DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                          DropdownMenuItem(
+                            value: 'Online',
+                            child: Text('Online'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _mode = v!);
+
+                          if (_mode == "Online" && !_onlineTourStarted) {
+                            _onlineTourStarted = true;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              ShowCaseWidget.of(context).startShowCase([
+                                _onlineBanksKey,
+                                _totalKey,
+                                _saveKey,
+                              ]);
+                            });
+                          }
+                        },
+
+                        decoration: const InputDecoration(
+                          labelText: 'Budget Mode',
                         ),
-                      ],
-                      onChanged: (v) => setState(() => _mode = v!),
-                      decoration: const InputDecoration(
-                        labelText: 'Budget Mode',
                       ),
                     ),
                   ],
@@ -337,50 +422,64 @@ class _AddBudgetState extends State<AddBudget> {
               const SizedBox(height: 16),
               _mode == 'Cash'
                   ? _sectionCard(
-                      child: TextFormField(
-                        controller: _cashAmountController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Cash Amount',
+                      child: Showcase(
+                        key: _cashAmountKey,
+                        description:
+                            "Enter the cash budget amount for this month 💵",
+                        child: TextFormField(
+                          controller: _cashAmountController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Cash Amount',
+                          ),
+                          validator: (v) {
+                            final amt = double.tryParse(v ?? '');
+                            if (amt == null || amt <= 0) {
+                              return 'Enter valid amount';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (v) {
-                          final amt = double.tryParse(v ?? '');
-                          if (amt == null || amt <= 0) {
-                            return 'Enter valid amount';
-                          }
-                          return null;
-                        },
                       ),
                     )
                   : _sectionCard(child: _buildOnlineBankField()),
               if (_mode == 'Online')
-                Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text('Total Budget'),
-                      const Spacer(),
-                      Text(
-                        '₹${_onlineTotal.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
+                Showcase(
+                  key: _totalKey,
+                  description:
+                      "This is total online budget (sum of all banks) 📌",
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('Total Budget'),
+                        const Spacer(),
+                        Text(
+                          '₹${_onlineTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               const SizedBox(height: 24),
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _saveBudget,
-                  child: const Text('Save Budget'),
+              Showcase(
+                key: _saveKey,
+                description: "Tap here to save your budget ✅",
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _saveBudget,
+                    child: const Text('Save Budget'),
+                  ),
                 ),
               ),
             ],

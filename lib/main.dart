@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/dashboard/home_screen.dart';
 import 'package:walletwatch/dashboard/splash_screen.dart';
@@ -20,7 +21,7 @@ void main() async {
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvd2Z3em52cHB3c3Ftc3ZobnNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA4NTIsImV4cCI6MjA3NjM3Njg1Mn0.TUNX-MiwxCg2ns1c9wpy9G1oIlL8-YA0RWmB6SRJT2U',
   );
-  runApp(const MyApp());
+  runApp(ShowCaseWidget(builder: (context) => const MyApp()));
 }
 
 class MyApp extends StatelessWidget {
