@@ -35,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _onlineKey = GlobalKey();
   final GlobalKey _addExpenseKey = GlobalKey();
   final GlobalKey _addBudgetKey = GlobalKey();
-  final GlobalKey _refreshKey = GlobalKey();
 
   final supabase = Supabase.instance.client;
 
@@ -64,10 +63,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserInfo();
-    _loadExpensesSeparately();
-    _loadBudgetsSeparately();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _initHome();
+  }
+
+  Future<void> _initHome() async {
+    await _loadUserInfo();
+    await _loadBudgetsSeparately();
+    await _loadExpensesSeparately();
+
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
       _startTourIfFirstTime();
     });
   }
@@ -109,7 +117,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _onlineKey,
       _addExpenseKey,
       _addBudgetKey,
-      _refreshKey,
     ]);
 
     await _secureStorage.write(key: _homeTourKey, value: "true");
@@ -293,19 +300,19 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ShowCaseWidget.of(context).startShowCase([
-                _totalRemainingKey,
-                _pieKey,
-                _cashKey,
-                _onlineKey,
-                _addExpenseKey,
-                _addBudgetKey,
-              ]);
-            },
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.help_outline),
+          //   onPressed: () {
+          //     ShowCaseWidget.of(context).startShowCase([
+          //       _totalRemainingKey,
+          //       _pieKey,
+          //       _cashKey,
+          //       _onlineKey,
+          //       _addExpenseKey,
+          //       _addBudgetKey,
+          //     ]);
+          //   },
+          // ),
           // IconButton(
           //   icon: const Icon(Icons.refresh),
           //   onPressed: _refreshAll,
@@ -514,6 +521,8 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(Icons.info, "About Us", '/about'),
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+            _drawerItem(Icons.bar_chart, "Reports", "/reports"),
+            _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
             ListTile(
               leading: const Icon(Icons.logout),
