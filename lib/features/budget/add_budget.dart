@@ -23,7 +23,10 @@ class _AddBudgetState extends State<AddBudget> {
 
   final List<Map<String, dynamic>> _bankInputs = [];
 
-  // ✅ Showcase Keys
+  static const String _addBudgetOnlineTourDoneKey =
+      "walletwatch_add_budget_online_tour_done";
+
+  //  Showcase Keys
   final GlobalKey _dateKey = GlobalKey();
   final GlobalKey _modeKey = GlobalKey();
   final GlobalKey _cashAmountKey = GlobalKey();
@@ -33,7 +36,7 @@ class _AddBudgetState extends State<AddBudget> {
 
   bool _onlineTourStarted = false;
 
-  // ✅ Tour storage
+  //  Tour storage
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addBudgetTourDoneKey =
       "walletwatch_add_budget_tour_done";
@@ -344,19 +347,19 @@ class _AddBudgetState extends State<AddBudget> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ShowCaseWidget.of(context).startShowCase([
-                _dateKey,
-                _modeKey,
-                if (_mode == "Cash") _cashAmountKey,
-                if (_mode == "Online") _onlineBanksKey,
-                if (_mode == "Online") _totalKey,
-                _saveKey,
-              ]);
-            },
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.help_outline),
+          //   onPressed: () {
+          //     ShowCaseWidget.of(context).startShowCase([
+          //       _dateKey,
+          //       _modeKey,
+          //       if (_mode == "Cash") _cashAmountKey,
+          //       if (_mode == "Online") _onlineBanksKey,
+          //       if (_mode == "Online") _totalKey,
+          //       _saveKey,
+          //     ]);
+          //   },
+          // ),
         ],
       ),
       body: Padding(
@@ -396,21 +399,32 @@ class _AddBudgetState extends State<AddBudget> {
                             child: Text('Online'),
                           ),
                         ],
-                        onChanged: (v) {
+                        onChanged: (v) async {
                           setState(() => _mode = v!);
 
-                          if (_mode == "Online" && !_onlineTourStarted) {
-                            _onlineTourStarted = true;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              ShowCaseWidget.of(context).startShowCase([
-                                _onlineBanksKey,
-                                _totalKey,
-                                _saveKey,
-                              ]);
-                            });
+                          if (_mode == "Online") {
+                            final done = await _secureStorage.read(
+                              key: _addBudgetOnlineTourDoneKey,
+                            );
+
+                            if (done != "true") {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+
+                                ShowCaseWidget.of(context).startShowCase([
+                                  _onlineBanksKey,
+                                  _totalKey,
+                                  _saveKey,
+                                ]);
+                              });
+
+                              await _secureStorage.write(
+                                key: _addBudgetOnlineTourDoneKey,
+                                value: "true",
+                              );
+                            }
                           }
                         },
-
                         decoration: const InputDecoration(
                           labelText: 'Budget Mode',
                         ),

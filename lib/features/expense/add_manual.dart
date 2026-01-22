@@ -46,7 +46,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   // ✅ Recent travel templates
   List<Map<String, dynamic>> _recentTravels = [];
 
-  // ✅ Controllers for Travel Autofill (fix for initialValue issue)
+  // ✅ Controllers for Travel Autofill
   final _travelModeController = TextEditingController();
   final _travelStartController = TextEditingController();
   final _travelDestController = TextEditingController();
@@ -61,10 +61,14 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   final GlobalKey _itemsKey = GlobalKey();
   final GlobalKey _saveKey = GlobalKey();
 
-  // ✅ tour storage
+  // ✅ Tour storage
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addExpenseTourDoneKey =
       "walletwatch_add_expense_tour_done";
+
+  // ✅ Online bank tour should run only once
+  static const String _addExpenseOnlineBankTourDoneKey =
+      "walletwatch_add_expense_online_bank_tour_done";
 
   @override
   void initState() {
@@ -78,29 +82,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  // ✅ FIXED: Auto tour doesn't include items (to avoid stuck issue)
   Future<void> _startAddExpenseTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _addExpenseTourDoneKey);
     if (done == "true") return;
 
     if (!mounted) return;
 
-    // ✅ Ensure items section exists before tour starts
-    setState(() {
-      _showItemsSection = true;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 200));
-
+    await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
 
-    ShowCaseWidget.of(context).startShowCase([
-      _dateKey,
-      _categoryKey,
-      _paymentKey,
-      _shopKey,
-      _itemsKey,
-      _saveKey,
-    ]);
+    ShowCaseWidget.of(
+      context,
+    ).startShowCase([_dateKey, _categoryKey, _paymentKey, _shopKey, _saveKey]);
 
     await _secureStorage.write(key: _addExpenseTourDoneKey, value: "true");
   }
@@ -231,13 +225,11 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           ? exp['bank']
           : null;
 
-      // ✅ Autofill travel controllers
       _travelModeController.text = tMode;
       _travelStartController.text = tStart;
       _travelDestController.text = tDest;
       _travelAmountController.clear();
 
-      // ✅ Update itemInputs too
       itemInputs = [
         {"mode": tMode, "start": tStart, "destination": tDest, "amount": ""},
       ];
@@ -268,7 +260,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
     final uuid = const Uuid().v4();
 
-    // ✅ Ensure travel data is saved from controllers
     if (_selectedCategory == "Travel") {
       itemInputs[0]["mode"] = _travelModeController.text.trim();
       itemInputs[0]["start"] = _travelStartController.text.trim();
@@ -387,7 +378,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           ],
         ),
 
-        // ✅ Travel Fields with controllers
         if (_selectedCategory == 'Travel') ...[
           TextFormField(
             controller: _travelModeController,
@@ -421,9 +411,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter amount' : null,
           ),
-        ]
-        // ✅ Other Categories
-        else ...[
+        ] else ...[
           TextFormField(
             decoration: const InputDecoration(labelText: 'Item Name'),
             initialValue: item['name'],
@@ -467,25 +455,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     if (result == null) return;
 
     setState(() {
-      // Fill shop name
       _shopController.text = (result["shop"] ?? "").toString();
 
-      // Fill date (only if OCR found)
       final scannedDate = (result["date"] ?? "").toString();
       if (scannedDate.isNotEmpty && scannedDate != "-") {
         _selectedDate = scannedDate;
       }
 
-      // Fill total (only if OCR found)
       final scannedTotal = (result["total"] ?? "").toString();
       final parsedTotal = double.tryParse(scannedTotal);
       if (parsedTotal != null && parsedTotal > 0) {
         total = parsedTotal;
-
-        // if items section not opened yet, open it
         _showItemsSection = true;
 
-        // add one item row as placeholder so it saves properly
         itemInputs = [
           {
             "name": "Scanned Receipt",
@@ -514,14 +496,20 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ShowCaseWidget.of(
-                context,
-              ).startShowCase([_dateKey, _categoryKey, _paymentKey, _shopKey]);
-            },
-          ),
+          // // ✅ Help button shows FULL tour (including items)
+          // IconButton(
+          //   icon: const Icon(Icons.help_outline),
+          //   onPressed: () {
+          //     ShowCaseWidget.of(context).startShowCase([
+          //       _dateKey,
+          //       _categoryKey,
+          //       _paymentKey,
+          //       _shopKey,
+          //       _itemsKey,
+          //       _saveKey,
+          //     ]);
+          //   },
+          // ),
         ],
         elevation: 0,
       ),
@@ -531,7 +519,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           key: _formKey,
           child: ListView(
             children: [
-              // ✅ Date + Shop
               Showcase(
                 key: _dateKey,
                 description: "Select the expense date 📅",
@@ -554,13 +541,13 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                           child: Text(_selectedDate ?? 'Select date'),
                         ),
                       ),
-                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
               ),
-              // ✅ Category + Payment
+
               const SizedBox(height: 10),
+
               _sectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,6 +557,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
+
                     Showcase(
                       key: _categoryKey,
                       description:
@@ -596,8 +584,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                   "amount": "",
                                 },
                               ];
-
-                              // clear controllers too
                               _travelModeController.clear();
                               _travelStartController.clear();
                               _travelDestController.clear();
@@ -612,7 +598,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 12),
+
                     Showcase(
                       key: _paymentKey,
                       description: "Select how you paid: Cash or Online 💳",
@@ -626,22 +614,39 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                               ),
                             )
                             .toList(),
-                        onChanged: (value) {
+                        onChanged: (value) async {
                           setState(() {
                             _selectedPaymentMode = value!;
                             _showItemsSection = true;
                           });
+
+                          // ✅ FIX: Bank showcase runs only once ever
                           if (_selectedPaymentMode == "Online") {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              ShowCaseWidget.of(
-                                context,
-                              ).startShowCase([_bankKey]);
-                            });
+                            final done = await _secureStorage.read(
+                              key: _addExpenseOnlineBankTourDoneKey,
+                            );
+
+                            if (done != "true") {
+                              // ✅ FIRST mark as done
+                              await _secureStorage.write(
+                                key: _addExpenseOnlineBankTourDoneKey,
+                                value: "true",
+                              );
+
+                              // ✅ THEN show the showcase
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                ShowCaseWidget.of(
+                                  context,
+                                ).startShowCase([_bankKey]);
+                              });
+                            }
                           }
                         },
                         decoration: const InputDecoration(labelText: 'Paid By'),
                       ),
                     ),
+
                     const SizedBox(height: 12),
 
                     if (_selectedPaymentMode == 'Online' &&
@@ -673,7 +678,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 10),
+
               Showcase(
                 key: _shopKey,
                 description:
@@ -699,18 +706,17 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   ),
                 ),
               ),
+
               const SizedBox(height: 10),
 
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _openReceiptScan,
-                  icon: const Icon(Icons.document_scanner),
-                  label: const Text("Scan Receipt"),
-                ),
-              ),
-
-              // ✅ Recent Travel Chips (only for Travel category)
+              // SizedBox(
+              //   width: double.infinity,
+              //   child: OutlinedButton.icon(
+              //     onPressed: _openReceiptScan,
+              //     icon: const Icon(Icons.document_scanner),
+              //     label: const Text("Scan Receipt ()"),
+              //   ),
+              // ),
               if (_selectedCategory == 'Travel' &&
                   _recentTravels.isNotEmpty) ...[
                 const SizedBox(height: 10),
@@ -731,9 +737,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 ),
               ],
 
-              // ✅ Items Section (shows after selection)
               if (_showItemsSection) ...[
                 const SizedBox(height: 10),
+
                 Showcase(
                   key: _itemsKey,
                   description:
@@ -789,6 +795,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ],
 
               const SizedBox(height: 16),
+
               Showcase(
                 key: _saveKey,
                 description: "Finally tap here to save the expense ✅",
@@ -807,12 +814,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   ),
                 ),
               ),
-
-              // ElevatedButton.icon(
-              //   onPressed: () => Navigator.pushNamed(context, "/scan_receipt"),
-              //   icon: const Icon(Icons.document_scanner),
-              //   label: const Text("Scan Receipt"),
-              // ),
             ],
           ),
         ),
