@@ -433,18 +433,18 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ShowCaseWidget.of(context).startShowCase([
-                _monthKey,
-                _chartKey,
-                _summaryKey,
-                _filterKey,
-                _listKey,
-              ]);
-            },
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.help_outline),
+          //   onPressed: () {
+          //     ShowCaseWidget.of(context).startShowCase([
+          //       _monthKey,
+          //       _chartKey,
+          //       _summaryKey,
+          //       _filterKey,
+          //       _listKey,
+          //     ]);
+          //   },
+          // ),
         ],
       ),
       body: RefreshIndicator(

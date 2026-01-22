@@ -8,6 +8,8 @@ import 'package:walletwatch/features/auth/login_screen.dart';
 import 'package:walletwatch/features/budget/add_budget.dart';
 import 'package:walletwatch/features/expense/add_manual.dart';
 import 'package:walletwatch/features/expense/scan_receipt.dart';
+import 'package:walletwatch/features/reports/export_report.dart';
+import 'package:walletwatch/features/reports/reports_page.dart';
 import 'package:walletwatch/features/settings/about_us.dart';
 import 'package:walletwatch/features/settings/budget_tracker.dart';
 import 'package:walletwatch/features/settings/edit_profile.dart';
@@ -44,8 +46,10 @@ class MyApp extends StatelessWidget {
         '/budget_tracker': (_) => const BudgetTracker(),
         '/how_to_use': (_) => const HowToUse(),
         '/budget': (_) => const AddBudget(),
+        '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
         '/scan_receipt': (_) => const ScanReceiptPage(),
+        "/export_report": (context) => const ExportReportPage(),
       },
     );
   }

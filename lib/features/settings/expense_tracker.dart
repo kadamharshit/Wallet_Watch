@@ -598,18 +598,18 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.blue,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: () {
-              ShowCaseWidget.of(context).startShowCase([
-                _monthKey,
-                _chartKey,
-                _summaryKey,
-                _filterKey,
-                _listKey,
-              ]);
-            },
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.help_outline),
+          //   onPressed: () {
+          //     ShowCaseWidget.of(context).startShowCase([
+          //       _monthKey,
+          //       _chartKey,
+          //       _summaryKey,
+          //       _filterKey,
+          //       _listKey,
+          //     ]);
+          //   },
+          // ),
         ],
       ),
       body: RefreshIndicator(
