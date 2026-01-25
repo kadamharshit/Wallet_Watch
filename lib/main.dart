@@ -48,7 +48,7 @@ class MyApp extends StatelessWidget {
         '/budget': (_) => const AddBudget(),
         '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
-        '/scan_receipt': (_) => const ScanReceiptPage(),
+        //'/scan_receipt': (_) => const ScanReceiptPage(),
         "/export_report": (context) => const ExportReportPage(),
       },
     );

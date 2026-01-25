@@ -446,42 +446,42 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     );
   }
 
-  Future<void> _openReceiptScan() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ScanReceiptPage()),
-    );
+  // Future<void> _openReceiptScan() async {
+  //   final result = await Navigator.push(
+  //     context,
+  //     MaterialPageRoute(builder: (_) => const ScanReceiptPage()),
+  //   );
 
-    if (result == null) return;
+  //   if (result == null) return;
 
-    setState(() {
-      _shopController.text = (result["shop"] ?? "").toString();
+  //   setState(() {
+  //     _shopController.text = (result["shop"] ?? "").toString();
 
-      final scannedDate = (result["date"] ?? "").toString();
-      if (scannedDate.isNotEmpty && scannedDate != "-") {
-        _selectedDate = scannedDate;
-      }
+  //     final scannedDate = (result["date"] ?? "").toString();
+  //     if (scannedDate.isNotEmpty && scannedDate != "-") {
+  //       _selectedDate = scannedDate;
+  //     }
 
-      final scannedTotal = (result["total"] ?? "").toString();
-      final parsedTotal = double.tryParse(scannedTotal);
-      if (parsedTotal != null && parsedTotal > 0) {
-        total = parsedTotal;
-        _showItemsSection = true;
+  //     final scannedTotal = (result["total"] ?? "").toString();
+  //     final parsedTotal = double.tryParse(scannedTotal);
+  //     if (parsedTotal != null && parsedTotal > 0) {
+  //       total = parsedTotal;
+  //       _showItemsSection = true;
 
-        itemInputs = [
-          {
-            "name": "Scanned Receipt",
-            "qty": "1",
-            "amount": parsedTotal.toStringAsFixed(2),
-          },
-        ];
-      }
-    });
+  //       itemInputs = [
+  //         {
+  //           "name": "Scanned Receipt",
+  //           "qty": "1",
+  //           "amount": parsedTotal.toStringAsFixed(2),
+  //         },
+  //       ];
+  //     }
+  //   });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Receipt data filled ✅")));
-  }
+  //   ScaffoldMessenger.of(
+  //     context,
+  //   ).showSnackBar(const SnackBar(content: Text("Receipt data filled ✅")));
+  // }
 
   // ---------------- BUILD ----------------
   @override
