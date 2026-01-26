@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -177,14 +178,53 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
   //-------------------SHOW EXPENSE DETAILS-------------------
   void _showExpenseDetails(Map<String, dynamic> expense) {
-    final itemsRaw = (expense['items'] ?? '').toString();
-    final items = itemsRaw.isNotEmpty ? itemsRaw.split('\n') : [];
+    final itemsRaw = (expense['items'] ?? '').toString().trim();
+    final isTravel = (expense['category'] ?? '').toString() == 'Travel';
 
-    final isTravel = expense['category'] == 'Travel';
-
+    // ✅ headers
     final headers = isTravel
         ? ['Mode', 'From', 'To', 'Amount']
-        : ['Item', 'Qty', 'Amount'];
+        : ['Item', 'Qty', 'Unit', 'Amount'];
+
+    // ✅ Parse items safely (JSON or old string)
+    List<Map<String, dynamic>> parsedItems = [];
+
+    if (itemsRaw.isNotEmpty) {
+      // ✅ Try JSON parsing first
+      try {
+        final decoded = jsonDecode(itemsRaw);
+
+        if (decoded is List) {
+          parsedItems = decoded.map<Map<String, dynamic>>((e) {
+            return Map<String, dynamic>.from(e as Map);
+          }).toList();
+        }
+      } catch (_) {
+        // ✅ Fallback to old format: Item | Qty | Amount (multi-line)
+        final lines = itemsRaw.split('\n');
+
+        for (final line in lines) {
+          final parts = line.split('|').map((e) => e.trim()).toList();
+
+          if (isTravel && parts.length >= 4) {
+            parsedItems.add({
+              "mode": parts[0],
+              "start": parts[1],
+              "destination": parts[2],
+              "amount": double.tryParse(parts[3]) ?? 0.0,
+            });
+          } else if (!isTravel && parts.length >= 3) {
+            parsedItems.add({
+              "name": parts[0],
+              "qty": parts[1],
+              "unit": "pcs",
+              "amount": double.tryParse(parts[2]) ?? 0.0,
+            });
+          }
+        }
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -224,9 +264,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
+
               SizedBox(
                 height: 280,
-                child: items.isEmpty
+                child: parsedItems.isEmpty
                     ? const Center(child: Text('No item details'))
                     : Column(
                         children: [
@@ -234,100 +275,79 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                           const SizedBox(height: 6),
                           Expanded(
                             child: ListView.builder(
-                              itemCount: items.length,
+                              itemCount: parsedItems.length,
                               itemBuilder: (_, i) {
-                                final parts = items[i]
-                                    .split('|')
-                                    .map((e) => e.trim())
-                                    .toList();
-                                if (isTravel && parts.length == 4) {
-                                  // Detect amount position
-                                  final amountIndex = parts.indexWhere(
-                                    (p) => double.tryParse(p) != null,
-                                  );
+                                final item = parsedItems[i];
 
-                                  if (amountIndex != 3 && amountIndex != -1) {
-                                    final amount = parts.removeAt(amountIndex);
-                                    parts.add(amount); // move amount to last
-                                  }
-                                }
-                                if (!isTravel && parts.length == 3) {
-                                  // Item | Qty | Amount
-                                  final amountIndex = parts.indexWhere(
-                                    (p) => double.tryParse(p) != null,
-                                  );
+                                if (isTravel) {
+                                  final mode = (item["mode"] ?? "-").toString();
+                                  final start = (item["start"] ?? "-")
+                                      .toString();
+                                  final dest = (item["destination"] ?? "-")
+                                      .toString();
+                                  final amt = (item["amount"] is num)
+                                      ? (item["amount"] as num).toDouble()
+                                      : double.tryParse(
+                                              item["amount"]?.toString() ?? "",
+                                            ) ??
+                                            0.0;
 
-                                  if (amountIndex != -1 && amountIndex != 2) {
-                                    final amount = parts.removeAt(amountIndex);
-                                    parts.add(amount);
-                                  }
-                                }
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(10),
-                                    child: Row(
-                                      children: isTravel
-                                          ? [
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 0
-                                                      ? parts[0]
-                                                      : '-',
-                                                ),
-                                              ), // Mode
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 1
-                                                      ? parts[1]
-                                                      : '-',
-                                                ),
-                                              ), // From
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 2
-                                                      ? parts[2]
-                                                      : '-',
-                                                ),
-                                              ), // To
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 3
-                                                      ? '₹${double.tryParse(parts[3])?.toStringAsFixed(2) ?? parts[3]}'
-                                                      : '-',
-                                                  textAlign: TextAlign.right,
-                                                ),
-                                              ), // Amount
-                                            ]
-                                          : [
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 0
-                                                      ? parts[0]
-                                                      : '-',
-                                                ),
-                                              ), // Item
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 1
-                                                      ? parts[1]
-                                                      : '-',
-                                                ),
-                                              ), // Qty
-                                              Expanded(
-                                                child: Text(
-                                                  parts.length > 2
-                                                      ? '₹${parts[2]}'
-                                                      : '-',
-                                                  textAlign: TextAlign.right,
-                                                ),
-                                              ), // Amount
-                                            ],
+                                  return Card(
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
                                     ),
-                                  ),
-                                );
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(child: Text(mode)),
+                                          Expanded(child: Text(start)),
+                                          Expanded(child: Text(dest)),
+                                          Expanded(
+                                            child: Text(
+                                              "₹${amt.toStringAsFixed(2)}",
+                                              textAlign: TextAlign.right,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  final name = (item["name"] ?? "-").toString();
+                                  final qty = (item["qty"] ?? "-").toString();
+                                  final unit = (item["unit"] ?? "pcs")
+                                      .toString();
+
+                                  final amt = (item["amount"] is num)
+                                      ? (item["amount"] as num).toDouble()
+                                      : double.tryParse(
+                                              item["amount"]?.toString() ?? "",
+                                            ) ??
+                                            0.0;
+
+                                  return Card(
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(child: Text(name)),
+                                          Expanded(child: Text(qty)),
+                                          Expanded(child: Text(unit)),
+                                          Expanded(
+                                            child: Text(
+                                              "₹${amt.toStringAsFixed(2)}",
+                                              textAlign: TextAlign.right,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                             ),
                           ),

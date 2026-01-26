@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:uuid/uuid.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:walletwatch/features/expense/scan_receipt.dart';
 
 class AddManualExpense extends StatefulWidget {
   const AddManualExpense({super.key});
@@ -26,7 +26,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   bool _showItemsSection = false;
 
-  List<Map<String, String>> itemInputs = [{}];
+  final List<String> _units = ['pcs', 'kg', 'g', 'L', 'ml'];
+  List<Map<String, String>> itemInputs = [
+    {"name": "", "qty": "", "unit": "pcs", "amount": ""},
+  ];
   double total = 0.0;
 
   String? _selectedBank;
@@ -141,10 +144,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   void _updateTotal() {
-    total = itemInputs.fold(
-      0.0,
-      (sum, i) => sum + (double.tryParse(i['amount'] ?? '0') ?? 0),
-    );
+    total = itemInputs.fold(0.0, (sum, i) {
+      final amt = double.tryParse(i['amount']?.toString() ?? '0') ?? 0;
+      return sum + amt;
+    });
     setState(() {});
   }
 
@@ -257,14 +260,34 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
     final date =
         _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
-
     final uuid = const Uuid().v4();
 
+    //  Build items JSON
+    String itemsJsonString = "[]";
+
     if (_selectedCategory == "Travel") {
-      itemInputs[0]["mode"] = _travelModeController.text.trim();
-      itemInputs[0]["start"] = _travelStartController.text.trim();
-      itemInputs[0]["destination"] = _travelDestController.text.trim();
-      itemInputs[0]["amount"] = _travelAmountController.text.trim();
+      final travelItems = [
+        {
+          "mode": _travelModeController.text.trim(),
+          "start": _travelStartController.text.trim(),
+          "destination": _travelDestController.text.trim(),
+          "amount": double.tryParse(_travelAmountController.text.trim()) ?? 0.0,
+        },
+      ];
+
+      itemsJsonString = jsonEncode(travelItems);
+    } else {
+      final normalItems = itemInputs.map((i) {
+        return {
+          "name": (i["name"] ?? "").toString().trim(),
+          "qty": double.tryParse((i["qty"] ?? "0").toString().trim()) ?? 0.0,
+          "unit": (i["unit"] ?? "pcs").toString(),
+          "amount":
+              double.tryParse((i["amount"] ?? "0").toString().trim()) ?? 0.0,
+        };
+      }).toList();
+
+      itemsJsonString = jsonEncode(normalItems);
     }
 
     final localExpense = {
@@ -272,33 +295,17 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       'date': date,
       'shop': _shopController.text.trim(),
       'category': _selectedCategory,
-      'items': itemInputs
-          .map((i) {
-            if (_selectedCategory == 'Travel') {
-              return [
-                i['mode'] ?? '',
-                i['start'] ?? '',
-                i['destination'] ?? '',
-                i['amount'] ?? '0',
-              ].join(' | ');
-            } else {
-              return [
-                i['name'] ?? '',
-                i['qty'] ?? '',
-                i['amount'] ?? '0',
-              ].join(' | ');
-            }
-          })
-          .join('\n'),
+      'items': itemsJsonString,
       'total': total,
       'mode': _selectedPaymentMode,
-      'bank': _selectedPaymentMode == 'Online' ? _selectedBank ?? '' : '',
+      'bank': _selectedPaymentMode == 'Online' ? (_selectedBank ?? '') : '',
       'synced': 0,
       'supabase_id': null,
     };
 
     final localId = await DatabaseHelper.instance.insertExpense(localExpense);
 
+    // ✅ Online sync
     if (await _hasInternetConnection()) {
       try {
         final res = await supabase
@@ -414,27 +421,53 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         ] else ...[
           TextFormField(
             decoration: const InputDecoration(labelText: 'Item Name'),
-            initialValue: item['name'],
-            onSaved: (val) => item['name'] = val ?? '',
+            initialValue: item['name']?.toString(),
+            onChanged: (val) => item['name'] = val,
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter item name' : null,
           ),
-          TextFormField(
-            decoration: const InputDecoration(labelText: 'Quantity'),
-            initialValue: item['qty'],
-            onSaved: (val) => item['qty'] = val ?? '',
-            validator: (val) =>
-                val == null || val.isEmpty ? 'Enter quantity' : null,
+
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  decoration: const InputDecoration(labelText: 'Qty'),
+                  keyboardType: TextInputType.number,
+                  initialValue: item['qty']?.toString(),
+                  onChanged: (val) => item['qty'] = val,
+                  validator: (val) =>
+                      val == null || val.isEmpty ? 'Enter qty' : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  value: (item['unit'] ?? 'pcs').toString(),
+                  items: _units
+                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val == null) return;
+                    setState(() {
+                      item['unit'] = val;
+                    });
+                  },
+                  decoration: const InputDecoration(labelText: "Unit"),
+                ),
+              ),
+            ],
           ),
+
           TextFormField(
             decoration: const InputDecoration(labelText: 'Amount'),
             keyboardType: TextInputType.number,
-            initialValue: item['amount'],
+            initialValue: item['amount']?.toString(),
             onChanged: (val) {
               item['amount'] = val;
               _updateTotal();
             },
-            onSaved: (val) => item['amount'] = val ?? '0',
             validator: (val) =>
                 val == null || val.isEmpty ? 'Enter amount' : null,
           ),
@@ -445,43 +478,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       ],
     );
   }
-
-  // Future<void> _openReceiptScan() async {
-  //   final result = await Navigator.push(
-  //     context,
-  //     MaterialPageRoute(builder: (_) => const ScanReceiptPage()),
-  //   );
-
-  //   if (result == null) return;
-
-  //   setState(() {
-  //     _shopController.text = (result["shop"] ?? "").toString();
-
-  //     final scannedDate = (result["date"] ?? "").toString();
-  //     if (scannedDate.isNotEmpty && scannedDate != "-") {
-  //       _selectedDate = scannedDate;
-  //     }
-
-  //     final scannedTotal = (result["total"] ?? "").toString();
-  //     final parsedTotal = double.tryParse(scannedTotal);
-  //     if (parsedTotal != null && parsedTotal > 0) {
-  //       total = parsedTotal;
-  //       _showItemsSection = true;
-
-  //       itemInputs = [
-  //         {
-  //           "name": "Scanned Receipt",
-  //           "qty": "1",
-  //           "amount": parsedTotal.toStringAsFixed(2),
-  //         },
-  //       ];
-  //     }
-  //   });
-
-  //   ScaffoldMessenger.of(
-  //     context,
-  //   ).showSnackBar(const SnackBar(content: Text("Receipt data filled ✅")));
-  // }
 
   // ---------------- BUILD ----------------
   @override
@@ -708,15 +704,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ),
 
               const SizedBox(height: 10),
-
-              // SizedBox(
-              //   width: double.infinity,
-              //   child: OutlinedButton.icon(
-              //     onPressed: _openReceiptScan,
-              //     icon: const Icon(Icons.document_scanner),
-              //     label: const Text("Scan Receipt ()"),
-              //   ),
-              // ),
               if (_selectedCategory == 'Travel' &&
                   _recentTravels.isNotEmpty) ...[
                 const SizedBox(height: 10),

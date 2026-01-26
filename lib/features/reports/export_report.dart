@@ -37,6 +37,19 @@ class _ExportReportPageState extends State<ExportReportPage> {
     _loadMonthsAndData();
   }
 
+  bool _isMonthCompleted(String monthKey) {
+    // monthKey format: yyyy-MM
+    final selected = DateTime.parse("$monthKey-01");
+
+    final now = DateTime.now();
+
+    // first day of next month
+    final nextMonth = DateTime(selected.year, selected.month + 1, 1);
+
+    // If today is >= next month => month finished ✅
+    return now.isAfter(nextMonth) || now.isAtSameMomentAs(nextMonth);
+  }
+
   // ---------------- LOAD ----------------
   Future<void> _loadMonthsAndData() async {
     setState(() => _isLoading = true);
@@ -102,6 +115,16 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
   // ---------------- PDF EXPORT ----------------
   Future<void> _exportPdf() async {
+    if (!_isMonthCompleted(_selectedMonth)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Monthly report can be exported only after month ends ✅",
+          ),
+        ),
+      );
+      return;
+    }
     final pdf = pw.Document();
     final fontData = await rootBundle.load("assets/Roboto-Regular.ttf");
     final ttf = pw.Font.ttf(fontData);
@@ -193,11 +216,30 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
   // ---------------- EXCEL EXPORT ----------------
   Future<void> _exportExcel() async {
-    final excel = Excel.createExcel();
-    final sheet = excel['Report'];
+    if (!_isMonthCompleted(_selectedMonth)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Monthly report can be exported only after month ends ✅",
+          ),
+        ),
+      );
+      return;
+    }
 
-    CellValue? t(String v) => TextCellValue(v);
-    CellValue? n(num v) => DoubleCellValue(v.toDouble());
+    final excel = Excel.createExcel();
+
+    // ✅ Remove default sheet
+    if (excel.sheets.keys.contains("Sheet1")) {
+      excel.delete("Sheet1");
+    }
+
+    // ✅ Create report sheet + make it active
+    final sheet = excel['Report'];
+    excel.setDefaultSheet("Report");
+
+    CellValue t(String v) => TextCellValue(v);
+    CellValue n(num v) => DoubleCellValue(v.toDouble());
 
     // Header
     sheet.appendRow([t("WalletWatch Expense Report")]);
@@ -235,9 +277,14 @@ class _ExportReportPageState extends State<ExportReportPage> {
     final file = File("${dir.path}/WalletWatch_Report_${_selectedMonth}.xlsx");
 
     final bytes = excel.encode();
-    if (bytes != null) {
-      await file.writeAsBytes(bytes);
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to generate Excel ❌")),
+      );
+      return;
     }
+
+    await file.writeAsBytes(bytes, flush: true);
 
     if (!mounted) return;
 
@@ -253,6 +300,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
+    final canExport = _isMonthCompleted(_selectedMonth);
     return Scaffold(
       appBar: AppBar(
         title: const Text("Export Report"),
@@ -308,21 +356,29 @@ class _ExportReportPageState extends State<ExportReportPage> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: _exportPdf,
+                      onPressed: canExport ? _exportPdf : null,
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text("Export PDF"),
+                      label: Text(
+                        canExport
+                            ? "Export PDF"
+                            : "Export PDF (Available after month ends)",
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // SizedBox(
-                  //   width: double.infinity,
-                  //   height: 50,
-                  //   // child: OutlinedButton.icon(
-                  //   //   onPressed: _exportExcel,
-                  //   //   icon: const Icon(Icons.table_chart),
-                  //   //   label: const Text("Export Excel"),
-                  //   // ),
-                  // ),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: canExport ? _exportExcel : null,
+                      icon: const Icon(Icons.table_chart),
+                      label: Text(
+                        canExport
+                            ? "Export Excel"
+                            : "Export Exce (Available after month ends)",
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
