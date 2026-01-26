@@ -10,10 +10,10 @@ class CreateAccountScreen extends StatefulWidget {
 
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _formKey = GlobalKey<FormState>();
+
   final nameController = TextEditingController();
   final mobileController = TextEditingController();
   final emailController = TextEditingController();
-  //final usernameController = TextEditingController();
   final passwordController = TextEditingController();
   final dobController = TextEditingController();
 
@@ -34,12 +34,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     try {
       final email = emailController.text.trim();
       final password = passwordController.text.trim();
-      //final username = usernameController.text.trim();
       final name = nameController.text.trim();
       final mobile = mobileController.text.trim();
       final dob = dobController.text.trim();
 
-      // 1️⃣ Create account using Supabase Auth
       final authResponse = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -51,7 +49,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         return;
       }
 
-      // Convert DOB to YYYY-MM-DD
+      // Convert DOB to YYYY-MM-DD (if provided)
       String? dobIso;
       if (dob.isNotEmpty) {
         try {
@@ -63,13 +61,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         } catch (_) {}
       }
 
-      // 2️⃣ Insert user profile AFTER successful signup
       await supabase.from('users').insert({
         'id': user.id,
         'name': name,
         'mobile': mobile,
         'email': email,
-        //'username': username,
         'dob': dobIso,
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -95,28 +91,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
   }
 
-  InputDecoration _buildDecoration({
-    required String label,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: Colors.black),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.grey[100],
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.black, width: 1.5),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.black, width: 2),
-      ),
-    );
-  }
-
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -129,147 +103,278 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
   }
 
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Create Account"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pushReplacementNamed(context, '/login');
-          },
-        ),
-      ),
-      body: Center(
-        child: Card(
-          elevation: 6,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          margin: const EdgeInsets.all(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Form(
-                key: _formKey,
-                child: Column(
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              //  HEADER
+              Container(
+                height: 260,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
+                ),
+                child: Stack(
                   children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: _buildDecoration(
-                        label: "Name",
-                        icon: Icons.person,
-                      ),
-                      validator: (v) => v!.isEmpty ? "Enter your name" : null,
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: mobileController,
-                      decoration: _buildDecoration(
-                        label: "Mobile Number",
-                        icon: Icons.phone,
-                      ),
-                      keyboardType: TextInputType.phone,
-                      validator: (v) =>
-                          v!.isEmpty ? "Enter your mobile number" : null,
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: emailController,
-                      decoration: _buildDecoration(
-                        label: "Email",
-                        icon: Icons.email_outlined,
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return "Enter your email";
-                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
-                          return "Enter a valid email";
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    // TextFormField(
-                    //   controller: usernameController,
-                    //   decoration: _buildDecoration(
-                    //     label: "Username",
-                    //     icon: Icons.person_outline,
+                    // Back button
+                    // Positioned(
+                    //   left: 10,
+                    //   top: 10,
+                    //   child: IconButton(
+                    //     icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    //     onPressed: () {
+                    //       Navigator.pushReplacementNamed(context, '/login');
+                    //     },
                     //   ),
-                    //   validator: (v) => v!.isEmpty ? "Enter a username" : null,
                     // ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: passwordController,
-                      obscureText: !_isPasswordVisible,
-                      decoration: _buildDecoration(
-                        label: "Password",
-                        icon: Icons.lock_outline,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
+                    Center(
+                      child: Container(
+                        height: 80,
+                        width: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.20),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.person_add_alt_1,
+                          color: Colors.white,
+                          size: 44,
                         ),
                       ),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) {
-                          return "Enter a password";
-                        }
-                        if (v.length < 7) {
-                          return "At least 7 characters required";
-                        }
-                        if (!RegExp(r'^(?=.*[A-Za-z])(?=.*\d)').hasMatch(v)) {
-                          return "Must contain letters and numbers";
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: dobController,
-                      readOnly: true,
-                      onTap: _pickDate,
-                      decoration: _buildDecoration(
-                        label: "Date of Birth (optional)",
-                        icon: Icons.calendar_today,
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.edit_calendar_outlined),
-                          onPressed: _pickDate,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    if (_errorMessage != null)
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _registerUser,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 48),
-                        backgroundColor: Colors.blueAccent,
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Register",
-                              style: TextStyle(fontSize: 18),
-                            ),
                     ),
                   ],
                 ),
               ),
-            ),
+
+              const SizedBox(height: 20),
+
+              //  WHITE CARD FORM
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        const Text(
+                          "Create Account",
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+
+                        // NAME
+                        TextFormField(
+                          controller: nameController,
+                          decoration: _pillDecoration(
+                            hint: "Name",
+                            icon: Icons.person_outline,
+                          ),
+                          validator: (v) =>
+                              v == null || v.isEmpty ? "Enter your name" : null,
+                        ),
+                        const SizedBox(height: 14),
+
+                        // MOBILE
+                        TextFormField(
+                          controller: mobileController,
+                          keyboardType: TextInputType.phone,
+                          decoration: _pillDecoration(
+                            hint: "Mobile Number",
+                            icon: Icons.phone_outlined,
+                          ),
+                          validator: (v) => v == null || v.isEmpty
+                              ? "Enter your mobile number"
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+
+                        //  EMAIL
+                        TextFormField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: _pillDecoration(
+                            hint: "Email",
+                            icon: Icons.mail_outline,
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty)
+                              return "Enter your email";
+                            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
+                              return "Enter a valid email";
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+
+                        //  PASSWORD
+                        TextFormField(
+                          controller: passwordController,
+                          obscureText: !_isPasswordVisible,
+                          decoration: _pillDecoration(
+                            hint: "Password",
+                            icon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
+                            ),
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
+                              return "Enter a password";
+                            }
+                            if (v.length < 7) {
+                              return "At least 7 characters required";
+                            }
+                            if (!RegExp(
+                              r'^(?=.*[A-Za-z])(?=.*\d)',
+                            ).hasMatch(v)) {
+                              return "Must contain letters and numbers";
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+
+                        //  DOB
+                        TextFormField(
+                          controller: dobController,
+                          readOnly: true,
+                          onTap: _pickDate,
+                          decoration: _pillDecoration(
+                            hint: "Date of Birth (optional)",
+                            icon: Icons.calendar_today_outlined,
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.edit_calendar_outlined),
+                              onPressed: _pickDate,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        //  ERROR MESSAGE
+                        if (_errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+
+                        const SizedBox(height: 10),
+
+                        //  REGISTER BUTTON
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _registerUser,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.4,
+                                    ),
+                                  )
+                                : const Text(
+                                    "Register",
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        //  BACK TO LOGIN TEXT
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text(
+                            "Already have an account? Login here",
+                            style: TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+            ],
           ),
         ),
       ),

@@ -24,6 +24,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // if (!_agreeTerms) {
+    //   setState(() {
+    //     _errorMessage = "Please accept terms and conditions";
+    //   });
+    //   return;
+    // }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -41,14 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (authRes.user != null) {
         if (!mounted) return;
 
-        // ✅ STORE USER DATA LOCALLY (FOR OFFLINE DRAWER)
         const storage = FlutterSecureStorage();
         await storage.write(key: 'useremail', value: email);
-
-        // Optional (safe fallback)
         await storage.write(key: 'username', value: email.split('@').first);
 
-        // ✅ INITIAL SYNC (you already wrote this correctly)
         await _initialSupabaseToLocalSync(authRes.user!);
 
         ScaffoldMessenger.of(
@@ -95,7 +98,6 @@ class _LoginScreenState extends State<LoginScreen> {
         .select()
         .eq('user_id', user.id);
 
-    // ⬇️ Expenses
     for (final e in expenses) {
       await DatabaseHelper.instance.upsertExpenseByUuid({
         'uuid': e['uuid'],
@@ -111,7 +113,6 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     }
 
-    // ⬇️ Budgets
     for (final b in budgets) {
       await DatabaseHelper.instance.insertBudget({
         'uuid': b['uuid'],
@@ -130,117 +131,246 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: Center(
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 6,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      "WalletWatch",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
+          child: Column(
+            children: [
+              //  HEADER
+              Container(
+                height: 260,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
+                ),
+                child: Center(
+                  child: Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.20),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const SizedBox(height: 24),
-
-                    // EMAIL
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: "Email",
-                        prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return "Enter your email";
-                        }
-                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                          return "Enter a valid email";
-                        }
-                        return null;
-                      },
+                    child: const Icon(
+                      Icons.account_balance_wallet_rounded,
+                      color: Colors.white,
+                      size: 44,
                     ),
-                    const SizedBox(height: 16),
-
-                    // PASSWORD
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: !_isPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: "Password",
-                        prefixIcon: const Icon(Icons.lock),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                        ),
-                      ),
-                      validator: (value) => value == null || value.isEmpty
-                          ? "Enter your password"
-                          : null,
-                    ),
-
-                    const SizedBox(height: 16),
-                    if (_errorMessage != null)
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Colors.red, fontSize: 14),
-                      ),
-
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 48),
-                        backgroundColor: Colors.blueAccent,
-                      ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("Login", style: TextStyle(fontSize: 18)),
-                    ),
-
-                    const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/register');
-                      },
-                      child: const Text(
-                        "Don’t have an account? Register here",
-                        style: TextStyle(
-                          color: Colors.blueAccent,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+
+              const SizedBox(height: 20),
+
+              //  WHITE CARD FORM
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        const Text(
+                          "WalletWatch",
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+
+                        //  EMAIL FIELD
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            hintText: "Email",
+                            prefixIcon: const Icon(Icons.mail_outline),
+                            filled: true,
+                            fillColor: const Color(0xFFF6F6F6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return "Enter your email";
+                            }
+                            if (!RegExp(
+                              r'^[^@]+@[^@]+\.[^@]+',
+                            ).hasMatch(value)) {
+                              return "Enter a valid email";
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+
+                        //  PASSWORD FIELD
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: !_isPasswordVisible,
+                          decoration: InputDecoration(
+                            hintText: "Password",
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
+                              icon: Icon(
+                                _isPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF6F6F6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          validator: (value) => value == null || value.isEmpty
+                              ? "Enter your password"
+                              : null,
+                        ),
+
+                        const SizedBox(height: 12),
+                        //  ERROR MESSAGE
+                        if (_errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+
+                        const SizedBox(height: 10),
+
+                        //  LOGIN BUTTON
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _login,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.4,
+                                    ),
+                                  )
+                                : const Text(
+                                    "Login",
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        //  REGISTER TEXT
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushNamed(context, '/register');
+                          },
+                          child: const Text(
+                            "Don't have an account? Register here",
+                            style: TextStyle(
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        //  SOCIAL LOGIN UI (ONLY UI)
+                        // Row(
+                        //   children: const [
+                        //     Expanded(child: Divider()),
+                        //     Padding(
+                        //       padding: EdgeInsets.symmetric(horizontal: 10),
+                        //       child: Text("or"),
+                        //     ),
+                        //     Expanded(child: Divider()),
+                        //   ],
+                        // ),
+                        const SizedBox(height: 14),
+
+                        // Row(
+                        //   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        //   children: [
+                        //     _socialBox(Icons.g_mobiledata, Colors.red),
+                        //     _socialBox(Icons.apple, Colors.black),
+                        //     _socialBox(Icons.facebook, Colors.blue),
+                        //   ],
+                        // ),
+                        const SizedBox(height: 14),
+
+                        // const Text(
+                        //   "Log in with your social media account",
+                        //   style: TextStyle(fontSize: 12, color: Colors.grey),
+                        // ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  // static Widget _socialBox(IconData icon, Color color) {
+  //   return Container(
+  //     height: 48,
+  //     width: 60,
+  //     decoration: BoxDecoration(
+  //       color: color.withOpacity(0.12),
+  //       borderRadius: BorderRadius.circular(14),
+  //     ),
+  //     child: Icon(icon, color: color, size: 28),
+  //   );
+  // }
 }

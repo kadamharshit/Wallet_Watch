@@ -27,10 +27,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
   final TextEditingController _bankController = TextEditingController();
 
   bool _saving = false;
-
   double total = 0.0;
 
-  // ✅ Item inputs (Works for both normal + travel)
   List<Map<String, String>> itemInputs = [{}];
 
   final List<String> _categories = const [
@@ -44,7 +42,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
   final List<String> _modes = const ['Cash', 'Online'];
 
-  // ✅ Units (for qty better than only "1")
   final List<String> _units = const [
     'pcs',
     'kg',
@@ -58,7 +55,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     'other',
   ];
 
-  // ---------------- INIT ----------------
   @override
   void initState() {
     super.initState();
@@ -83,18 +79,14 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
     _bankController.text = (exp['bank'] ?? '').toString();
 
-    // ✅ Load items into fields
     _loadExistingItems();
 
-    // ✅ Load total
     final amount = (exp['total'] as num?)?.toDouble() ?? 0.0;
     total = amount;
 
-    // ✅ if items have proper amounts, recompute
     _updateTotal();
   }
 
-  // ---------------- ITEMS PARSING ----------------
   void _loadExistingItems() {
     final raw = (widget.expense['items'] ?? '').toString().trim();
 
@@ -103,7 +95,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
       return;
     }
 
-    // ✅ If JSON array saved
     if (raw.startsWith('[')) {
       try {
         final decoded = jsonDecode(raw);
@@ -111,7 +102,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
           itemInputs = decoded.map<Map<String, String>>((e) {
             final map = Map<String, dynamic>.from(e);
 
-            // Travel fields
             if (_category == 'Travel') {
               return {
                 "mode": (map["mode"] ?? "").toString(),
@@ -121,7 +111,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
               };
             }
 
-            // Normal items
             return {
               "name": (map["name"] ?? "").toString(),
               "qty": (map["qty"] ?? "").toString(),
@@ -133,16 +122,12 @@ class _EditExpensePageState extends State<EditExpensePage> {
           if (itemInputs.isEmpty) itemInputs = [{}];
           return;
         }
-      } catch (_) {
-        // If broken json -> fallback to old format
-      }
+      } catch (_) {}
     }
 
-    // ✅ Old format: lines "Milk | 1 | 29"
     final lines = raw.split('\n').where((l) => l.trim().isNotEmpty).toList();
 
     if (_category == 'Travel') {
-      // "Mode | From | To | Amount"
       itemInputs = lines.map((line) {
         final parts = line.split('|').map((e) => e.trim()).toList();
         return {
@@ -153,7 +138,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
         };
       }).toList();
     } else {
-      // "Name | Qty | Amount"
       itemInputs = lines.map((line) {
         final parts = line.split('|').map((e) => e.trim()).toList();
         return {
@@ -168,7 +152,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     if (itemInputs.isEmpty) itemInputs = [{}];
   }
 
-  // ---------------- TOTAL ----------------
   void _updateTotal() {
     total = itemInputs.fold(0.0, (sum, i) {
       return sum + (double.tryParse(i['amount'] ?? '0') ?? 0);
@@ -176,7 +159,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     if (mounted) setState(() {});
   }
 
-  // ---------------- ADD/REMOVE ITEM ----------------
   void _addItem() {
     setState(() {
       if (_category == "Travel") {
@@ -200,7 +182,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     });
   }
 
-  // ---------------- DATE PICKER ----------------
   Future<void> _pickDate() async {
     final initial = DateTime.tryParse(_dateString) ?? DateTime.now();
 
@@ -217,7 +198,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     }
   }
 
-  // ---------------- JSON SAVE FORMAT ----------------
   String _buildItemsJson() {
     final list = itemInputs.map((i) {
       if (_category == "Travel") {
@@ -240,7 +220,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
     return jsonEncode(list);
   }
 
-  // ---------------- SAVE ----------------
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -257,20 +236,18 @@ class _EditExpensePageState extends State<EditExpensePage> {
       'date': _dateString,
       'shop': _shopController.text.trim(),
       'category': _category,
-      'items': _buildItemsJson(), // ✅ JSON saved
+      'items': _buildItemsJson(),
       'total': total,
       'mode': _mode,
       'bank': _mode == 'Online' ? _bankController.text.trim() : '',
     };
 
     try {
-      // ✅ Update local SQLite
       final localId = widget.expense['id'] as int?;
       if (localId != null) {
         await DatabaseHelper.instance.updateExpense(localId, updatedExpense);
       }
 
-      // ✅ Update Supabase (best effort)
       final supabase = Supabase.instance.client;
       final user = supabase.auth.currentUser;
 
@@ -308,7 +285,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Expense updated ✅')));
+        ).showSnackBar(const SnackBar(content: Text('Expense updated')));
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -321,130 +298,254 @@ class _EditExpensePageState extends State<EditExpensePage> {
     }
   }
 
-  // ---------------- ITEM UI ----------------
-  Widget _buildItemFields(int index) {
-    final item = itemInputs[index];
-
-    final isTravel = _category == "Travel";
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              "Item ${index + 1}",
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            if (itemInputs.length > 1)
-              IconButton(
-                onPressed: () => _removeItem(index),
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-              ),
-          ],
-        ),
-
-        if (isTravel) ...[
-          TextFormField(
-            initialValue: item["mode"],
-            decoration: const InputDecoration(labelText: "Mode"),
-            onChanged: (val) => item["mode"] = val,
-            validator: (val) =>
-                val == null || val.trim().isEmpty ? "Enter mode" : null,
-          ),
-          TextFormField(
-            initialValue: item["start"],
-            decoration: const InputDecoration(labelText: "From"),
-            onChanged: (val) => item["start"] = val,
-            validator: (val) =>
-                val == null || val.trim().isEmpty ? "Enter start" : null,
-          ),
-          TextFormField(
-            initialValue: item["destination"],
-            decoration: const InputDecoration(labelText: "To"),
-            onChanged: (val) => item["destination"] = val,
-            validator: (val) =>
-                val == null || val.trim().isEmpty ? "Enter destination" : null,
-          ),
-          TextFormField(
-            initialValue: item["amount"],
-            decoration: const InputDecoration(labelText: "Amount"),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (val) {
-              item["amount"] = val;
-              _updateTotal();
-            },
-            validator: (val) {
-              final a = double.tryParse(val ?? "");
-              if (a == null || a <= 0) return "Enter valid amount";
-              return null;
-            },
-          ),
-        ] else ...[
-          TextFormField(
-            initialValue: item["name"],
-            decoration: const InputDecoration(labelText: "Item Name"),
-            onChanged: (val) => item["name"] = val,
-            validator: (val) =>
-                val == null || val.trim().isEmpty ? "Enter item name" : null,
-          ),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextFormField(
-                  initialValue: item["qty"],
-                  decoration: const InputDecoration(labelText: "Qty"),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (val) => item["qty"] = val,
-                  validator: (val) =>
-                      val == null || val.trim().isEmpty ? "Enter qty" : null,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: DropdownButtonFormField<String>(
-                  value: (_units.contains(item["unit"])) ? item["unit"] : "pcs",
-                  decoration: const InputDecoration(labelText: "Unit"),
-                  items: _units
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      item["unit"] = val ?? "pcs";
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-          TextFormField(
-            initialValue: item["amount"],
-            decoration: const InputDecoration(labelText: "Amount"),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (val) {
-              item["amount"] = val;
-              _updateTotal();
-            },
-            validator: (val) {
-              final a = double.tryParse(val ?? "");
-              if (a == null || a <= 0) return "Enter valid amount";
-              return null;
-            },
-          ),
-        ],
-
-        const SizedBox(height: 12),
-        const Divider(),
-      ],
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
     );
   }
 
-  // ---------------- DISPOSE ----------------
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue, Color(0xFF1E88E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              "Edit Expense",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Container(
+            height: 40,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.edit_note, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemFields(int index) {
+    final item = itemInputs[index];
+    final isTravel = _category == "Travel";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                "Item ${index + 1}",
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              if (itemInputs.length > 1)
+                IconButton(
+                  onPressed: () => _removeItem(index),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (isTravel) ...[
+            TextFormField(
+              initialValue: item["mode"],
+              decoration: _pillDecoration(
+                hint: "Mode",
+                icon: Icons.directions_bus_outlined,
+              ),
+              onChanged: (val) => item["mode"] = val,
+              validator: (val) =>
+                  val == null || val.trim().isEmpty ? "Enter mode" : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: item["start"],
+              decoration: _pillDecoration(
+                hint: "From",
+                icon: Icons.location_on_outlined,
+              ),
+              onChanged: (val) => item["start"] = val,
+              validator: (val) =>
+                  val == null || val.trim().isEmpty ? "Enter start" : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: item["destination"],
+              decoration: _pillDecoration(
+                hint: "To",
+                icon: Icons.flag_outlined,
+              ),
+              onChanged: (val) => item["destination"] = val,
+              validator: (val) => val == null || val.trim().isEmpty
+                  ? "Enter destination"
+                  : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: item["amount"],
+              decoration: _pillDecoration(
+                hint: "Amount",
+                icon: Icons.currency_rupee,
+              ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (val) {
+                item["amount"] = val;
+                _updateTotal();
+              },
+              validator: (val) {
+                final a = double.tryParse(val ?? "");
+                if (a == null || a <= 0) return "Enter valid amount";
+                return null;
+              },
+            ),
+          ] else ...[
+            TextFormField(
+              initialValue: item["name"],
+              decoration: _pillDecoration(
+                hint: "Item Name",
+                icon: Icons.shopping_bag_outlined,
+              ),
+              onChanged: (val) => item["name"] = val,
+              validator: (val) =>
+                  val == null || val.trim().isEmpty ? "Enter item name" : null,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    initialValue: item["qty"],
+                    decoration: _pillDecoration(
+                      hint: "Qty",
+                      icon: Icons.numbers,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (val) => item["qty"] = val,
+                    validator: (val) =>
+                        val == null || val.trim().isEmpty ? "Enter qty" : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    value: (_units.contains(item["unit"]))
+                        ? item["unit"]
+                        : "pcs",
+                    decoration: _pillDecoration(
+                      hint: "Unit",
+                      icon: Icons.straighten,
+                    ),
+                    items: _units
+                        .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        item["unit"] = val ?? "pcs";
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: item["amount"],
+              decoration: _pillDecoration(
+                hint: "Amount",
+                icon: Icons.currency_rupee,
+              ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (val) {
+                item["amount"] = val;
+                _updateTotal();
+              },
+              validator: (val) {
+                final a = double.tryParse(val ?? "");
+                if (a == null || a <= 0) return "Enter valid amount";
+                return null;
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _shopController.dispose();
@@ -453,178 +554,265 @@ class _EditExpensePageState extends State<EditExpensePage> {
     super.dispose();
   }
 
-  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     final isTravel = _category == "Travel";
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Expense'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              InkWell(
-                onTap: _pickDate,
-                child: IgnorePointer(
-                  child: TextFormField(
-                    controller: _dateController,
-                    decoration: const InputDecoration(
-                      labelText: 'Date',
-                      suffixIcon: Icon(Icons.calendar_today),
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.only(top: 6, bottom: 18),
+                  children: [
+                    _sectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Expense Details",
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 12),
+
+                          InkWell(
+                            onTap: _pickDate,
+                            borderRadius: BorderRadius.circular(30),
+                            child: IgnorePointer(
+                              child: TextFormField(
+                                controller: _dateController,
+                                decoration: _pillDecoration(
+                                  hint: "Date",
+                                  icon: Icons.calendar_today_outlined,
+                                  suffixIcon: const Icon(
+                                    Icons.edit_calendar_outlined,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          TextFormField(
+                            controller: _shopController,
+                            decoration: _pillDecoration(
+                              hint: "Shop Name / Type",
+                              icon: Icons.storefront_outlined,
+                            ),
+                            validator: (val) =>
+                                val == null || val.trim().isEmpty
+                                ? 'Enter shop name'
+                                : null,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          DropdownButtonFormField<String>(
+                            value: _category,
+                            items: _categories
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val == null) return;
+
+                              setState(() {
+                                _category = val;
+
+                                if (_category == "Travel") {
+                                  itemInputs = [
+                                    {
+                                      "mode": "",
+                                      "start": "",
+                                      "destination": "",
+                                      "amount": "",
+                                    },
+                                  ];
+                                } else {
+                                  itemInputs = [
+                                    {
+                                      "name": "",
+                                      "qty": "",
+                                      "unit": "pcs",
+                                      "amount": "",
+                                    },
+                                  ];
+                                }
+
+                                _updateTotal();
+                              });
+                            },
+                            decoration: _pillDecoration(
+                              hint: "Category",
+                              icon: Icons.category_outlined,
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          DropdownButtonFormField<String>(
+                            value: _mode,
+                            items: _modes
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val == null) return;
+                              setState(() {
+                                _mode = val;
+                                if (_mode == 'Cash') _bankController.clear();
+                              });
+                            },
+                            decoration: _pillDecoration(
+                              hint: "Paid By",
+                              icon: Icons.payments_outlined,
+                            ),
+                          ),
+
+                          if (_mode == 'Online') ...[
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _bankController,
+                              decoration: _pillDecoration(
+                                hint: "Bank (optional)",
+                                icon: Icons.account_balance_outlined,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
 
-              TextFormField(
-                controller: _shopController,
-                decoration: const InputDecoration(
-                  labelText: 'Shop Name / Type',
-                ),
-                validator: (val) => val == null || val.trim().isEmpty
-                    ? 'Enter shop name'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-
-              DropdownButtonFormField<String>(
-                value: _category,
-                items: _categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val == null) return;
-
-                  setState(() {
-                    _category = val;
-
-                    // ✅ Reset item fields structure when category changes
-                    if (_category == "Travel") {
-                      itemInputs = [
-                        {
-                          "mode": "",
-                          "start": "",
-                          "destination": "",
-                          "amount": "",
-                        },
-                      ];
-                    } else {
-                      itemInputs = [
-                        {"name": "", "qty": "", "unit": "pcs", "amount": ""},
-                      ];
-                    }
-
-                    _updateTotal();
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 12),
-
-              DropdownButtonFormField<String>(
-                value: _mode,
-                items: _modes
-                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val == null) return;
-                  setState(() {
-                    _mode = val;
-                    if (_mode == 'Cash') _bankController.clear();
-                  });
-                },
-                decoration: const InputDecoration(labelText: 'Paid By'),
-              ),
-
-              if (_mode == 'Online') ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _bankController,
-                  decoration: const InputDecoration(
-                    labelText: 'Bank (optional)',
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 16),
-
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      const Text(
-                        "Total",
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                    _sectionContainer(
+                      child: Row(
+                        children: [
+                          const Text(
+                            "Total",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            "₹${total.toStringAsFixed(2)}",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      Text(
-                        "₹${total.toStringAsFixed(2)}",
+                    ),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        isTravel ? "Travel Entries" : "Items",
                         style: const TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          fontSize: 18,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
 
-              const SizedBox(height: 12),
+                    _sectionContainer(
+                      child: Column(
+                        children: [
+                          ...List.generate(
+                            itemInputs.length,
+                            (index) => _buildItemFields(index),
+                          ),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _addItem,
+                              icon: const Icon(Icons.add),
+                              label: Text(
+                                isTravel
+                                    ? "Add Another Trip"
+                                    : "Add Another Item",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue,
+                                side: const BorderSide(
+                                  color: Colors.blue,
+                                  width: 1.3,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
-              Text(
-                isTravel ? "Travel Entries" : "Items",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              ...List.generate(
-                itemInputs.length,
-                (index) => _buildItemFields(index),
-              ),
-
-              const SizedBox(height: 10),
-
-              ElevatedButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add),
-                label: Text(isTravel ? "Add Another Trip" : "Add Another Item"),
-              ),
-
-              const SizedBox(height: 18),
-
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _saveChanges,
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text(
-                          'Save Changes',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _saving ? null : _saveChanges,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: _saving
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Save Changes',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                         ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

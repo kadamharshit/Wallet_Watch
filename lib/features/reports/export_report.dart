@@ -38,19 +38,12 @@ class _ExportReportPageState extends State<ExportReportPage> {
   }
 
   bool _isMonthCompleted(String monthKey) {
-    // monthKey format: yyyy-MM
     final selected = DateTime.parse("$monthKey-01");
-
     final now = DateTime.now();
-
-    // first day of next month
     final nextMonth = DateTime(selected.year, selected.month + 1, 1);
-
-    // If today is >= next month => month finished ✅
     return now.isAfter(nextMonth) || now.isAtSameMomentAs(nextMonth);
   }
 
-  // ---------------- LOAD ----------------
   Future<void> _loadMonthsAndData() async {
     setState(() => _isLoading = true);
 
@@ -74,7 +67,6 @@ class _ExportReportPageState extends State<ExportReportPage> {
       _selectedMonth = monthList.first;
     }
 
-    // Filter month wise
     final monthExpenses = expenses
         .where((e) => (e['date'] ?? '').toString().startsWith(_selectedMonth))
         .toList();
@@ -113,18 +105,16 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
   double get _remaining => _totalBudget - _totalExpense;
 
-  // ---------------- PDF EXPORT ----------------
   Future<void> _exportPdf() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            "Monthly report can be exported only after month ends ✅",
-          ),
+          content: Text("Monthly report can be exported only after month ends"),
         ),
       );
       return;
     }
+
     final pdf = pw.Document();
     final fontData = await rootBundle.load("assets/Roboto-Regular.ttf");
     final ttf = pw.Font.ttf(fontData);
@@ -140,7 +130,6 @@ class _ExportReportPageState extends State<ExportReportPage> {
           pw.SizedBox(height: 6),
           pw.Text("Month: ${_monthLabel(_selectedMonth)}"),
           pw.SizedBox(height: 12),
-
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
@@ -169,14 +158,12 @@ class _ExportReportPageState extends State<ExportReportPage> {
               ],
             ),
           ),
-
           pw.SizedBox(height: 14),
           pw.Text(
             "Transactions",
             style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 8),
-
           pw.Table.fromTextArray(
             headers: ["Date", "Shop", "Category", "Mode", "Total"],
             data: _monthExpenses.map((e) {
@@ -209,19 +196,16 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text("PDF saved ✅ ${file.path}")));
+    ).showSnackBar(SnackBar(content: Text("PDF saved: ${file.path}")));
 
     await Share.shareXFiles([XFile(file.path)], text: "WalletWatch Report PDF");
   }
 
-  // ---------------- EXCEL EXPORT ----------------
   Future<void> _exportExcel() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            "Monthly report can be exported only after month ends ✅",
-          ),
+          content: Text("Monthly report can be exported only after month ends"),
         ),
       );
       return;
@@ -229,31 +213,26 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
     final excel = Excel.createExcel();
 
-    // ✅ Remove default sheet
     if (excel.sheets.keys.contains("Sheet1")) {
       excel.delete("Sheet1");
     }
 
-    // ✅ Create report sheet + make it active
     final sheet = excel['Report'];
     excel.setDefaultSheet("Report");
 
     CellValue t(String v) => TextCellValue(v);
     CellValue n(num v) => DoubleCellValue(v.toDouble());
 
-    // Header
     sheet.appendRow([t("WalletWatch Expense Report")]);
     sheet.appendRow([t("Month"), t(_monthLabel(_selectedMonth))]);
     sheet.appendRow([t("")]);
 
-    // Summary
     sheet.appendRow([t("Summary")]);
     sheet.appendRow([t("Total Budget"), n(_totalBudget)]);
     sheet.appendRow([t("Total Expense"), n(_totalExpense)]);
     sheet.appendRow([t("Remaining"), n(_remaining)]);
     sheet.appendRow([t("")]);
 
-    // Transactions
     sheet.appendRow([t("Transactions")]);
     sheet.appendRow([
       t("Date"),
@@ -278,9 +257,9 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
     final bytes = excel.encode();
     if (bytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to generate Excel ❌")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Failed to generate Excel")));
       return;
     }
 
@@ -290,98 +269,278 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text("Excel saved ✅ ${file.path}")));
+    ).showSnackBar(SnackBar(content: Text("Excel saved: ${file.path}")));
 
     await Share.shareXFiles([
       XFile(file.path),
     ], text: "WalletWatch Report Excel");
   }
 
-  // ---------------- UI ----------------
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue, Color(0xFF1E88E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              "Export Report",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Container(
+            height: 40,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.download_for_offline, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canExport = _isMonthCompleted(_selectedMonth);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Export Report"),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: _availableMonths.contains(_selectedMonth)
-                        ? _selectedMonth
-                        : null,
-                    decoration: const InputDecoration(
-                      labelText: "Select Month",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_month),
-                    ),
-                    items: _availableMonths
-                        .map(
-                          (m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(_monthLabel(m)),
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.blue),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.only(top: 6, bottom: 18),
+                      children: [
+                        _sectionContainer(
+                          child: DropdownButtonFormField<String>(
+                            value: _availableMonths.contains(_selectedMonth)
+                                ? _selectedMonth
+                                : null,
+                            decoration: _pillDecoration(
+                              hint: "Select Month",
+                              icon: Icons.calendar_month,
+                            ),
+                            items: _availableMonths
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(_monthLabel(m)),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) async {
+                              if (val == null) return;
+                              setState(() => _selectedMonth = val);
+                              await _loadMonthsAndData();
+                            },
                           ),
-                        )
-                        .toList(),
-                    onChanged: (val) async {
-                      if (val == null) return;
-                      setState(() => _selectedMonth = val);
-                      await _loadMonthsAndData();
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  Card(
-                    child: ListTile(
-                      title: Text(
-                        "Total Budget: ₹${_totalBudget.toStringAsFixed(2)}",
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        "Total Expense: ₹${_totalExpense.toStringAsFixed(2)}\nRemaining: ₹${_remaining.toStringAsFixed(2)}",
-                      ),
+                        ),
+                        _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Summary",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _summaryRow(
+                                title: "Total Budget",
+                                value: "₹${_totalBudget.toStringAsFixed(2)}",
+                                valueColor: Colors.blue,
+                              ),
+                              const SizedBox(height: 6),
+                              _summaryRow(
+                                title: "Total Expense",
+                                value: "₹${_totalExpense.toStringAsFixed(2)}",
+                                valueColor: Colors.redAccent,
+                              ),
+                              const SizedBox(height: 6),
+                              _summaryRow(
+                                title: "Remaining",
+                                value: "₹${_remaining.toStringAsFixed(2)}",
+                                valueColor: _remaining >= 0
+                                    ? Colors.green
+                                    : Colors.red,
+                              ),
+                              const SizedBox(height: 12),
+                              if (!canExport)
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: Colors.orange,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Export will be enabled only after month ends.",
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: ElevatedButton.icon(
+                                  onPressed: canExport ? _exportPdf : null,
+                                  icon: const Icon(Icons.picture_as_pdf),
+                                  label: Text(
+                                    canExport
+                                        ? "Export PDF"
+                                        : "Export PDF (Locked)",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: OutlinedButton.icon(
+                                  onPressed: canExport ? _exportExcel : null,
+                                  icon: const Icon(Icons.table_chart),
+                                  label: Text(
+                                    canExport
+                                        ? "Export Excel"
+                                        : "Export Excel (Locked)",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.blue,
+                                    side: const BorderSide(
+                                      color: Colors.blue,
+                                      width: 1.3,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: canExport ? _exportPdf : null,
-                      icon: const Icon(Icons.picture_as_pdf),
-                      label: Text(
-                        canExport
-                            ? "Export PDF"
-                            : "Export PDF (Available after month ends)",
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: canExport ? _exportExcel : null,
-                      icon: const Icon(Icons.table_chart),
-                      label: Text(
-                        canExport
-                            ? "Export Excel"
-                            : "Export Exce (Available after month ends)",
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow({
+    required String title,
+    required String value,
+    required Color valueColor,
+  }) {
+    return Row(
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const Spacer(),
+        Text(
+          value,
+          style: TextStyle(fontWeight: FontWeight.bold, color: valueColor),
+        ),
+      ],
     );
   }
 }

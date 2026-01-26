@@ -15,7 +15,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // ---------------- State ----------------
   double _cashExpense = 0.0;
   double _onlineExpense = 0.0;
 
@@ -25,10 +24,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _useremail = '';
 
-  //Tour Storage
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _homeTourKey = "WalletWatch_home_tour_done";
-  // Showcase Keys
+
   final GlobalKey _totalRemainingKey = GlobalKey();
   final GlobalKey _pieKey = GlobalKey();
   final GlobalKey _cashKey = GlobalKey();
@@ -99,15 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  //-------------Tour function-----------------
   Future<void> _startTourIfFirstTime() async {
     final done = await _secureStorage.read(key: _homeTourKey);
-
     if (done == "true") return;
 
-    // small delay so UI builds perfectly
     await Future.delayed(const Duration(milliseconds: 200));
-
     if (!mounted) return;
 
     ShowCaseWidget.of(context).startShowCase([
@@ -136,7 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (date != null && date.startsWith(currentMonth)) {
         final amount = (item['total'] as num?)?.toDouble() ?? 0.0;
         final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
-
         mode == 'online' ? online += amount : cash += amount;
       }
     }
@@ -232,31 +225,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return SizedBox(
-      height: 220,
+      height: 210,
       child: PieChart(
         PieChartData(
           sectionsSpace: 2,
-          centerSpaceRadius: 50,
+          centerSpaceRadius: 48,
           sections: [
             PieChartSectionData(
               value: _cashExpense,
               color: Colors.green,
-              radius: 50,
+              radius: 52,
               title: "${((_cashExpense / total) * 100).toStringAsFixed(0)}%",
               titleStyle: const TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
                 color: Colors.white,
               ),
             ),
             PieChartSectionData(
               value: _onlineExpense,
               color: Colors.blue,
-              radius: 50,
+              radius: 52,
               title: "${((_onlineExpense / total) * 100).toStringAsFixed(0)}%",
               titleStyle: const TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
                 color: Colors.white,
               ),
             ),
@@ -295,52 +288,40 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("WalletWatch"),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.help_outline),
-          //   onPressed: () {
-          //     ShowCaseWidget.of(context).startShowCase([
-          //       _totalRemainingKey,
-          //       _pieKey,
-          //       _cashKey,
-          //       _onlineKey,
-          //       _addExpenseKey,
-          //       _addBudgetKey,
-          //     ]);
-          //   },
-          // ),
-          // IconButton(
-          //   icon: const Icon(Icons.refresh),
-          //   onPressed: _refreshAll,
-          // ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF4F6F8),
+      drawer: _buildDrawer(),
       body: RefreshIndicator(
         onRefresh: _refreshAll,
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            //  MODERN APPBAR HEADER
+            SliverAppBar(
+              pinned: true,
+              expandedHeight: 10,
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              title: const Text("WalletWatch"),
+            ),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
                 child: Column(
                   children: [
-                    const SizedBox(height: 12),
                     _buildTotalRemainingCard(),
                     _buildPieCard(),
                     _buildRemainingRow(),
+                    const SizedBox(height: 8),
+                    _buildBottomButtons(),
+                    const SizedBox(height: 18),
                   ],
                 ),
               ),
             ),
-            _buildBottomButtons(),
           ],
         ),
       ),
-      drawer: _buildDrawer(),
     );
   }
 
@@ -349,22 +330,60 @@ class _HomeScreenState extends State<HomeScreen> {
     return Showcase(
       key: _totalRemainingKey,
       description: "This is your total remaining money for this month 💰",
-      child: Card(
+      child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: ListTile(
-          leading: const Icon(Icons.savings, size: 32),
-          title: Text(
-            "Total Remaining • ${currentMonthYear()}",
-            style: const TextStyle(fontWeight: FontWeight.w600),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue.withOpacity(0.06)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          subtitle: Text(
-            "₹ ${_totalRemaining.toStringAsFixed(2)}",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: _amountColor(_totalRemaining),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
-          ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              height: 46,
+              width: 46,
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.savings, color: Colors.blue),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Total Remaining • ${currentMonthYear()}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "₹ ${_totalRemaining.toStringAsFixed(2)}",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _amountColor(_totalRemaining),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -374,25 +393,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return Showcase(
       key: _pieKey,
       description: "This chart shows Cash vs Online expenses 📊",
-      child: Card(
+      child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Expense Breakdown",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              _buildExpensePieChart(),
-              const SizedBox(height: 12),
-              _buildPieLegend(),
-            ],
-          ),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Expense Breakdown",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            _buildExpensePieChart(),
+            const SizedBox(height: 12),
+            _buildPieLegend(),
+          ],
         ),
       ),
     );
@@ -439,7 +465,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
             Showcase(
@@ -447,9 +473,20 @@ class _HomeScreenState extends State<HomeScreen> {
               description: "Tap here to add a new expense ➕",
               child: SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.add),
-                  label: const Text("Add Expense"),
+                  label: const Text(
+                    "Add Expense",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
                   onPressed: () async {
                     await Navigator.pushNamed(context, '/add_expense');
                     _loadExpensesSeparately();
@@ -463,9 +500,22 @@ class _HomeScreenState extends State<HomeScreen> {
               description: "Tap here to add your monthly budget 💳",
               child: SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.account_balance_wallet),
-                  label: const Text("Add Budget"),
+                  label: const Text(
+                    "Add Budget",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blue,
+                    elevation: 0,
+                    side: const BorderSide(color: Colors.blue, width: 1.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
                   onPressed: () async {
                     await Navigator.pushNamed(context, '/budget');
                     _loadBudgetsSeparately();
@@ -484,39 +534,55 @@ class _HomeScreenState extends State<HomeScreen> {
       child: SafeArea(
         child: ListView(
           children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(color: Colors.blue),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue, Color(0xFF1E88E5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 36,
+                    radius: 30,
                     backgroundColor: Colors.white,
                     child: Text(
                       getInitials(_username),
                       style: const TextStyle(
-                        fontSize: 26,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.blue,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _username,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _username.isEmpty ? "User" : _username,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _useremail,
+                          style: const TextStyle(color: Colors.white70),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    _useremail,
-                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 6),
             _drawerItem(Icons.person, "My Profile", '/profiles'),
             _drawerItem(Icons.info, "About Us", '/about'),
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
@@ -525,7 +591,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
             ListTile(
-              leading: const Icon(Icons.logout),
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
               title: const Text("Sign Out"),
               onTap: _logout,
             ),
@@ -546,6 +612,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  //  FIXED CARD (no Expanded inside)
   Widget _buildRemainingCard({
     required String title,
     required IconData icon,
@@ -555,33 +622,68 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required EdgeInsets margin,
   }) {
-    return Expanded(
-      child: Card(
-        margin: margin,
-        child: ListTile(
-          leading: Icon(icon),
-          title: Text(title),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(
-                "₹ ${amount.toStringAsFixed(2)}",
-                style: TextStyle(
-                  color: _amountColor(amount),
-                  fontWeight: FontWeight.bold,
+              Container(
+                height: 36,
+                width: 36,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(
-                value: progress,
-                color: color,
-                backgroundColor: Colors.grey.shade300,
-              ),
-              const SizedBox(height: 2),
-              Text(percentText, style: const TextStyle(fontSize: 12)),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            "₹ ${amount.toStringAsFixed(2)}",
+            style: TextStyle(
+              color: _amountColor(amount),
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              color: color,
+              minHeight: 8,
+              backgroundColor: Colors.grey.shade300,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            percentText,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+        ],
       ),
     );
   }

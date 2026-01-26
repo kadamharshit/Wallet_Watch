@@ -21,7 +21,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
 
   List<String> _availableMonths = [];
 
-  String _filterMode = 'All'; // All / Cash / Online
+  String _filterMode = 'All';
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
 
@@ -49,23 +49,12 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     await _loadBudgetsForMonth(_selectedMonth);
   }
 
-  // List<String> _getAvailableMonths() {
-  //   final months = _filteredBudgets
-  //       .map((b) => (b['date'] ?? '').toString().substring(0, 7))
-  //       .toSet()
-  //       .toList();
-
-  //   months.sort((a, b) => b.compareTo(a)); // latest first
-  //   return months;
-  // }
-
   Future<void> _startBudgetTrackerTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _budgetTrackerTourDoneKey);
     if (done == "true") return;
 
     if (!mounted) return;
 
-    // small delay so UI loads nicely
     await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
 
@@ -76,11 +65,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     await _secureStorage.write(key: _budgetTrackerTourDoneKey, value: "true");
   }
 
-  // ---------------- LOAD ----------------
   Future<void> _loadBudgetsForMonth(String month) async {
     final allBudgets = await DatabaseHelper.instance.getBudget();
 
-    // ✅ Build available months safely
     final months =
         allBudgets
             .map((b) => (b['date'] ?? '').toString().substring(0, 7))
@@ -88,7 +75,6 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             .toList()
           ..sort((a, b) => b.compareTo(a));
 
-    // ✅ Ensure selected month exists
     if (!months.contains(month)) {
       month = months.isNotEmpty ? months.first : month;
     }
@@ -118,7 +104,6 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     });
   }
 
-  // ---------------- FILTER ----------------
   List<Map<String, dynamic>> get _filteredByMode {
     if (_filterMode == 'All') return _filteredBudgets;
 
@@ -128,13 +113,13 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     }).toList();
   }
 
-  // ---------------- EDIT ----------------
   Future<void> _showEditDialog(Map<String, dynamic> entry) async {
     final controller = TextEditingController(text: entry['total'].toString());
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Edit Budget"),
         content: TextField(
           controller: controller,
@@ -166,6 +151,10 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                 _loadBudgetsForMonth(_selectedMonth);
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text("Save"),
           ),
         ],
@@ -173,11 +162,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  // ---------------- DELETE ----------------
   Future<bool> _confirmDelete(Map<String, dynamic> entry) async {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Delete budget?"),
         content: const Text("This action cannot be undone."),
         actions: [
@@ -187,7 +176,10 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
             child: const Text("Delete"),
           ),
         ],
@@ -210,57 +202,123 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     return false;
   }
 
-  // ---------------- SUMMARY ----------------
-  Widget _buildSummary() {
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue, Color(0xFF1E88E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              "Budget Tracker",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Container(
+            height: 40,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.wallet_outlined, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _buildBudgetPieChart() {
     final total = _cashTotal + _onlineTotal;
 
-    final cashFrac = total == 0 ? 0 : _cashTotal / total;
-    final onlineFrac = total == 0 ? 0 : _onlineTotal / total;
+    if (total <= 0) {
+      return const Padding(
+        padding: EdgeInsets.all(10),
+        child: Text(
+          "No budget data for this month",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "This Month's Budget",
-              style: TextStyle(fontWeight: FontWeight.w600),
+    return SizedBox(
+      height: 210,
+      child: PieChart(
+        PieChartData(
+          centerSpaceRadius: 42,
+          sectionsSpace: 2,
+          sections: [
+            PieChartSectionData(
+              value: _cashTotal,
+              color: Colors.green,
+              title: "${((_cashTotal / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              "Total: ₹${total.toStringAsFixed(2)}",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text("Cash: ₹${_cashTotal.toStringAsFixed(2)}"),
-                ),
-                Expanded(
-                  child: Text(
-                    "Online: ₹${_onlineTotal.toStringAsFixed(2)}",
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: (cashFrac * 1000).round(),
-                    child: Container(height: 6, color: Colors.green),
-                  ),
-                  Expanded(
-                    flex: (onlineFrac * 1000).round(),
-                    child: Container(height: 6, color: Colors.blue),
-                  ),
-                ],
+            PieChartSectionData(
+              value: _onlineTotal,
+              color: Colors.blue,
+              title: "${((_onlineTotal / total) * 100).toStringAsFixed(0)}%",
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
@@ -269,7 +327,131 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  // ---------------- CARD ----------------
+  Widget _buildPieLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _legendItem(Colors.green, "Cash"),
+        const SizedBox(width: 16),
+        _legendItem(Colors.blue, "Online"),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
+    );
+  }
+
+  Widget _buildSummary() {
+    final total = _cashTotal + _onlineTotal;
+
+    final cashFrac = total == 0 ? 0 : _cashTotal / total;
+    final onlineFrac = total == 0 ? 0 : _onlineTotal / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "This Month's Budget",
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          "₹${total.toStringAsFixed(2)}",
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Cash",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "₹${_cashTotal.toStringAsFixed(2)}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Online",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "₹${_onlineTotal.toStringAsFixed(2)}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: Row(
+            children: [
+              Expanded(
+                flex: (cashFrac * 1000).round().clamp(0, 1000),
+                child: Container(height: 7, color: Colors.green),
+              ),
+              Expanded(
+                flex: (onlineFrac * 1000).round().clamp(0, 1000),
+                child: Container(height: 7, color: Colors.blue),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBudgetCard(Map<String, dynamic> item) {
     final amount = (item['total'] as num?)?.toDouble() ?? 0;
     final isOnline = (item['mode'] ?? '') == 'Online';
@@ -285,7 +467,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       secondaryBackground: _slideBg(
         Icons.delete,
         'Delete',
-        Colors.red,
+        Colors.redAccent,
         Alignment.centerRight,
       ),
       confirmDismiss: (direction) async {
@@ -295,30 +477,65 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         }
         return await _confirmDelete(item);
       },
-      child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: isOnline
-                ? Colors.blue.withOpacity(0.12)
-                : Colors.green.withOpacity(0.12),
-            child: Icon(
-              isOnline ? Icons.account_balance_wallet : Icons.money,
-              color: isOnline ? Colors.blue : Colors.green,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
-          ),
-          title: Text(
-            isOnline && (item['bank'] ?? '').toString().isNotEmpty
-                ? item['bank']
-                : '${item['mode']} Budget',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text("Date: ${item['date']}"),
-          trailing: Text(
-            "₹${amount.toStringAsFixed(2)}",
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+          ],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: isOnline
+                  ? Colors.blue.withOpacity(0.12)
+                  : Colors.green.withOpacity(0.12),
+              child: Icon(
+                isOnline ? Icons.account_balance_wallet_outlined : Icons.money,
+                color: isOnline ? Colors.blue : Colors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isOnline && (item['bank'] ?? '').toString().isNotEmpty
+                        ? item['bank']
+                        : '${item['mode']} Budget',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    "Date: ${item['date']}",
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              "₹${amount.toStringAsFixed(2)}",
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.blue,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -351,189 +568,173 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  // -------------PIE CHART FOR BUDGET TRACKER-------------
-  Widget _buildBudgetPieChart() {
-    final total = _cashTotal + _onlineTotal;
-
-    if (total <= 0) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text(
-          "No budget data for this month",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 200,
-      child: PieChart(
-        PieChartData(
-          centerSpaceRadius: 40,
-          sectionsSpace: 2,
-          sections: [
-            PieChartSectionData(
-              value: _cashTotal,
-              color: Colors.green,
-              title: "${((_cashTotal / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            PieChartSectionData(
-              value: _onlineTotal,
-              color: Colors.blue,
-              title: "${((_onlineTotal / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  //--------------------------PIE CHART LEGEND----------------
-  Widget _buildPieLegend() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _legendItem(Colors.green, "Cash"),
-        const SizedBox(width: 16),
-        _legendItem(Colors.blue, "Online"),
-      ],
-    );
-  }
-
-  Widget _legendItem(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(label),
-      ],
-    );
-  }
-
-  // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
     final list = _filteredByMode;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Budget Tracker"),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.help_outline),
-          //   onPressed: () {
-          //     ShowCaseWidget.of(context).startShowCase([
-          //       _monthKey,
-          //       _chartKey,
-          //       _summaryKey,
-          //       _filterKey,
-          //       _listKey,
-          //     ]);
-          //   },
-          // ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshBudgets,
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
         child: Column(
           children: [
-            Showcase(
-              key: _monthKey,
-              description: "Select month to view budgets for that month 📅",
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
+            _buildHeader(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refreshBudgets,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(top: 6, bottom: 18),
                   children: [
-                    const Icon(Icons.calendar_month),
-                    const SizedBox(width: 8),
-
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedMonth,
-                        decoration: const InputDecoration(
-                          labelText: "Select Month",
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _availableMonths
-                            .map(
-                              (m) => DropdownMenuItem(
-                                value: m,
-                                child: Text(
-                                  DateFormat(
-                                    'MMMM yyyy',
-                                  ).format(DateTime.parse('$m-01')),
+                    Showcase(
+                      key: _monthKey,
+                      description:
+                          "Select month to view budgets for that month",
+                      child: _sectionContainer(
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedMonth,
+                          decoration: _pillDecoration(
+                            hint: "Select Month",
+                            icon: Icons.calendar_month,
+                          ),
+                          items: _availableMonths
+                              .map(
+                                (m) => DropdownMenuItem(
+                                  value: m,
+                                  child: Text(
+                                    DateFormat(
+                                      'MMMM yyyy',
+                                    ).format(DateTime.parse('$m-01')),
+                                  ),
                                 ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _selectedMonth = value);
+                              _loadBudgetsForMonth(value);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    Showcase(
+                      key: _chartKey,
+                      description:
+                          "This chart shows Cash vs Online budget split",
+                      child: _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Budget Breakdown",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _buildBudgetPieChart(),
+                            const SizedBox(height: 10),
+                            _buildPieLegend(),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Showcase(
+                      key: _summaryKey,
+                      description:
+                          "This shows total budget, cash total & online total",
+                      child: _sectionContainer(child: _buildSummary()),
+                    ),
+                    Showcase(
+                      key: _filterKey,
+                      description:
+                          "Filter budget entries by mode: All / Cash / Online",
+                      child: _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Filter",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              children: ['All', 'Cash', 'Online']
+                                  .map(
+                                    (m) => ChoiceChip(
+                                      label: Text(m),
+                                      selected: _filterMode == m,
+                                      selectedColor: Colors.blue.withOpacity(
+                                        0.18,
+                                      ),
+                                      labelStyle: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: _filterMode == m
+                                            ? Colors.blue
+                                            : Colors.black,
+                                      ),
+                                      onSelected: (_) =>
+                                          setState(() => _filterMode = m),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Showcase(
+                      key: _listKey,
+                      description:
+                          "Swipe cards to Edit or Delete budget entries",
+                      child: list.isEmpty
+                          ? _sectionContainer(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    height: 70,
+                                    width: 70,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Icon(
+                                      Icons.wallet_outlined,
+                                      color: Colors.blue,
+                                      size: 38,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    "No budget entries found",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Try selecting a different month or add a budget.",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ),
                             )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedMonth = value);
-                            _loadBudgetsForMonth(value);
-                          }
-                        },
-                      ),
+                          : Column(
+                              children: list.map(_buildBudgetCard).toList(),
+                            ),
                     ),
                   ],
                 ),
-              ),
-            ),
-            Showcase(
-              key: _chartKey,
-              description: "This chart shows Cash vs Online budget split 📊",
-              child: _buildBudgetPieChart(),
-            ),
-            _buildPieLegend(),
-            Showcase(
-              key: _summaryKey,
-              description:
-                  "This shows total budget, cash total & online total ✅",
-              child: _buildSummary(),
-            ),
-            Showcase(
-              key: _filterKey,
-              description: "Filter budget entries by mode: All / Cash / Online",
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Wrap(
-                  spacing: 8,
-                  children: ['All', 'Cash', 'Online']
-                      .map(
-                        (m) => ChoiceChip(
-                          label: Text(m),
-                          selected: _filterMode == m,
-                          onSelected: (_) => setState(() => _filterMode = m),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Showcase(
-                key: _listKey,
-                description: "Swipe cards to Edit or Delete budget entries 🧾",
-                child: list.isEmpty
-                    ? const Center(child: Text("No budget entries found"))
-                    : ListView.builder(
-                        itemCount: list.length,
-                        itemBuilder: (_, i) => _buildBudgetCard(list[i]),
-                      ),
               ),
             ),
           ],

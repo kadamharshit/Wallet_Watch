@@ -3,173 +3,306 @@ import 'package:flutter/material.dart';
 class AboutUs extends StatelessWidget {
   const AboutUs({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back),
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue, Color(0xFF1E88E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        title: const Text("About WalletWatch"),
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade50),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // -------- App Intro --------
-            Center(
-              child: Column(
-                children: const [
-                  Icon(
-                    Icons.account_balance_wallet,
-                    size: 64,
-                    color: Colors.blue,
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    "WalletWatch",
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    "Track • Budget • Control",
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ],
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              "About WalletWatch",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // -------- Description Card --------
-            Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  "WalletWatch helps you manage your expenses and maintain a clear record of your spending. "
-                  "It is designed to keep your finances simple, transparent, and under control.",
-                  style: TextStyle(fontSize: 16, height: 1.6),
-                  textAlign: TextAlign.justify,
-                ),
-              ),
+          ),
+          Container(
+            height: 40,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(14),
             ),
-
-            const SizedBox(height: 20),
-
-            // -------- Features --------
-            const Text(
-              "Key Features",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-
-            _featureTile(
-              icon: Icons.edit_note,
-              title: "Manual Expense Entry",
-              subtitle: "Add and categorize expenses easily.",
-            ),
-            _featureTile(
-              icon: Icons.receipt_long,
-              title: "Receipt Scan",
-              subtitle: "Scan receipts to auto-fill data.",
-              trailing: _comingSoonChip(),
-            ),
-            _featureTile(
-              icon: Icons.pie_chart,
-              title: "Budget Tracking",
-              subtitle: "Monitor monthly cash and online budgets.",
-            ),
-            _featureTile(
-              icon: Icons.bar_chart,
-              title: "Insights & History",
-              subtitle: "Understand where your money goes.",
-            ),
-
-            const SizedBox(height: 24),
-
-            // -------- Contact --------
-            const Text(
-              "Support",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-
-            Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.email, color: Colors.blue),
-                title: const Text("Contact Us"),
-                subtitle: const Text("expensetracker@gmail.com"),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            Center(
-              child: Text(
-                "Made with ❤️ to help you manage money better",
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-              ),
-            ),
-          ],
-        ),
+            child: const Icon(Icons.info_outline, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
 
-  // -------- Feature Tile Widget --------
-  static Widget _featureTile({
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _featureTile({
     required IconData icon,
     required String title,
     required String subtitle,
     Widget? trailing,
   }) {
-    return Card(
-      elevation: 0.8,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.blue),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle),
-        trailing: trailing,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.blue.withOpacity(0.12),
+            child: Icon(icon, color: Colors.blue),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14.5,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) trailing,
+        ],
       ),
     );
   }
 
-  static Widget _comingSoonChip() {
+  Widget _comingSoonChip() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.orange.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: const Text(
         "Coming Soon",
         style: TextStyle(
           fontSize: 11,
           color: Colors.orange,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(top: 8, bottom: 20),
+                child: Column(
+                  children: [
+                    _sectionContainer(
+                      child: Column(
+                        children: [
+                          Container(
+                            height: 86,
+                            width: 86,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(22),
+                            ),
+                            child: Image.asset(
+                              "assets/icon.png",
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            "WalletWatch",
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            "Track • Budget • Control",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    _sectionContainer(
+                      child: Text(
+                        "WalletWatch helps you manage your expenses and maintain a clear record of your spending. "
+                        "It is designed to keep your finances simple, transparent, and under control.",
+                        style: const TextStyle(fontSize: 15.5, height: 1.55),
+                        textAlign: TextAlign.justify,
+                      ),
+                    ),
+
+                    _sectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Key Features",
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _featureTile(
+                            icon: Icons.edit_note,
+                            title: "Manual Expense Entry",
+                            subtitle: "Add and categorize expenses easily.",
+                          ),
+                          // _featureTile(
+                          //   icon: Icons.receipt_long,
+                          //   title: "Receipt Scan",
+                          //   subtitle: "Scan receipts to auto-fill data.",
+                          //   trailing: _comingSoonChip(),
+                          // ),
+                          _featureTile(
+                            icon: Icons.pie_chart_outline,
+                            title: "Budget Tracking",
+                            subtitle:
+                                "Monitor monthly cash and online budgets.",
+                          ),
+                          _featureTile(
+                            icon: Icons.bar_chart,
+                            title: "Insights & History",
+                            subtitle: "Understand where your money goes.",
+                          ),
+                          _featureTile(
+                            icon: Icons.download,
+                            title: "Export Report",
+                            subtitle: "Export Report in PDF or Excel Form",
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    _sectionContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Support",
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF6F6F6),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Colors.blue.withOpacity(
+                                    0.12,
+                                  ),
+                                  child: const Icon(
+                                    Icons.email,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Contact Us",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "expensetracker@gmail.com",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      "Made with ❤️ to help you manage money better",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

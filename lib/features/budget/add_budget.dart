@@ -34,8 +34,6 @@ class _AddBudgetState extends State<AddBudget> {
   final GlobalKey _totalKey = GlobalKey();
   final GlobalKey _saveKey = GlobalKey();
 
-  bool _onlineTourStarted = false;
-
   //  Tour storage
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addBudgetTourDoneKey =
@@ -137,7 +135,6 @@ class _AddBudgetState extends State<AddBudget> {
         final uuid = const Uuid().v4();
 
         final localId = await DatabaseHelper.instance.insertBudget({
-          //'user_id': user.id,
           'uuid': uuid,
           'date': date,
           'mode': 'Cash',
@@ -168,11 +165,13 @@ class _AddBudgetState extends State<AddBudget> {
 
         saved = true;
       } else {
+        //  Validate all amounts using keys
         for (var b in _bankInputs) {
           final key = b['amountKey'] as GlobalKey<FormFieldState>;
           if (!(key.currentState?.validate() ?? false)) return;
         }
 
+        //  Save all banks
         for (var b in _bankInputs) {
           final bankName = b['bank'].text.trim();
           final amount = double.tryParse(b['amount'].text) ?? 0.0;
@@ -181,7 +180,6 @@ class _AddBudgetState extends State<AddBudget> {
           final uuid = const Uuid().v4();
 
           final localId = await DatabaseHelper.instance.insertBudget({
-            //'user_id': user.id,
             'uuid': uuid,
             'date': date,
             'mode': 'Online',
@@ -269,11 +267,41 @@ class _AddBudgetState extends State<AddBudget> {
     }
   }
 
-  Widget _sectionCard({required Widget child}) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
+  //  Common pill decoration
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 
@@ -287,217 +315,321 @@ class _AddBudgetState extends State<AddBudget> {
             final index = entry.key;
             final c = entry.value;
 
-            return Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: c['bank'],
-                        decoration: const InputDecoration(
-                          labelText: 'Bank Name',
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6F6F6),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: c['bank'],
+                          decoration: _pillDecoration(
+                            hint: "Bank Name",
+                            icon: Icons.account_balance,
+                          ),
                         ),
                       ),
+                      if (_bankInputs.length > 1)
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent,
+                          ),
+                          onPressed: () => _removeBankField(index),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    key: c['amountKey'],
+                    controller: c['amount'],
+                    keyboardType: TextInputType.number,
+                    decoration: _pillDecoration(
+                      hint: "Amount",
+                      icon: Icons.currency_rupee,
                     ),
-                    if (_bankInputs.length > 1)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () => _removeBankField(index),
-                      ),
-                  ],
-                ),
-                TextFormField(
-                  key: c['amountKey'],
-                  controller: c['amount'],
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Amount'),
-                  validator: (v) {
-                    final amt = double.tryParse(v ?? '');
-                    if (amt == null || amt <= 0) return 'Enter valid amount';
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                ),
-                const Divider(),
-              ],
+                    validator: (v) {
+                      final amt = double.tryParse(v ?? '');
+                      if (amt == null || amt <= 0) return 'Enter valid amount';
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
             );
           }),
-          ElevatedButton.icon(
-            onPressed: _addBankField,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Another Bank'),
+
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _addBankField,
+              icon: const Icon(Icons.add),
+              label: const Text(
+                "Add Another Bank",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue,
+                side: const BorderSide(color: Colors.blue, width: 1.3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  //  UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Budget'),
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back),
-        ),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.help_outline),
-          //   onPressed: () {
-          //     ShowCaseWidget.of(context).startShowCase([
-          //       _dateKey,
-          //       _modeKey,
-          //       if (_mode == "Cash") _cashAmountKey,
-          //       if (_mode == "Online") _onlineBanksKey,
-          //       if (_mode == "Online") _totalKey,
-          //       _saveKey,
-          //     ]);
-          //   },
-          // ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              _sectionCard(
-                child: Column(
-                  children: [
-                    Showcase(
-                      key: _dateKey,
-                      description:
-                          "Select budget date (usually current month) 📅",
-                      child: InkWell(
-                        onTap: _pickDate,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Date',
-                            border: OutlineInputBorder(),
-                          ),
-                          child: Text(_selectedDate ?? 'Select Date'),
-                        ),
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            //  Header like your app theme
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue, Color(0xFF1E88E5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(26),
+                  bottomRight: Radius.circular(26),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      "Add Budget",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Showcase(
-                      key: _modeKey,
-                      description: "Choose budget type: Cash or Online 💰🏦",
-                      child: DropdownButtonFormField(
-                        value: _mode,
-                        items: const [
-                          DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                          DropdownMenuItem(
-                            value: 'Online',
-                            child: Text('Online'),
+                  ),
+                  Container(
+                    height: 40,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.20),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.wallet, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.only(top: 6, bottom: 18),
+                  children: [
+                    // Date + Mode
+                    _sectionContainer(
+                      child: Column(
+                        children: [
+                          Showcase(
+                            key: _dateKey,
+                            description:
+                                "Select budget date (usually current month) 📅",
+                            child: InkWell(
+                              onTap: _pickDate,
+                              borderRadius: BorderRadius.circular(30),
+                              child: InputDecorator(
+                                decoration: _pillDecoration(
+                                  hint: "Select Date",
+                                  icon: Icons.calendar_today_outlined,
+                                ),
+                                child: Text(
+                                  _selectedDate ?? "Select Date",
+                                  style: const TextStyle(fontSize: 15),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Showcase(
+                            key: _modeKey,
+                            description:
+                                "Choose budget type: Cash or Online 💰🏦",
+                            child: DropdownButtonFormField(
+                              value: _mode,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'Cash',
+                                  child: Text('Cash'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Online',
+                                  child: Text('Online'),
+                                ),
+                              ],
+                              onChanged: (v) async {
+                                setState(() => _mode = v!);
+
+                                if (_mode == "Online") {
+                                  final done = await _secureStorage.read(
+                                    key: _addBudgetOnlineTourDoneKey,
+                                  );
+
+                                  if (done != "true") {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (!mounted) return;
+
+                                          ShowCaseWidget.of(
+                                            context,
+                                          ).startShowCase([
+                                            _onlineBanksKey,
+                                            _totalKey,
+                                            _saveKey,
+                                          ]);
+                                        });
+
+                                    await _secureStorage.write(
+                                      key: _addBudgetOnlineTourDoneKey,
+                                      value: "true",
+                                    );
+                                  }
+                                }
+                              },
+                              decoration: _pillDecoration(
+                                hint: "Budget Mode",
+                                icon: Icons.payments_outlined,
+                              ),
+                            ),
                           ),
                         ],
-                        onChanged: (v) async {
-                          setState(() => _mode = v!);
+                      ),
+                    ),
 
-                          if (_mode == "Online") {
-                            final done = await _secureStorage.read(
-                              key: _addBudgetOnlineTourDoneKey,
-                            );
+                    //  Cash / Online input
+                    if (_mode == 'Cash')
+                      _sectionContainer(
+                        child: Showcase(
+                          key: _cashAmountKey,
+                          description:
+                              "Enter the cash budget amount for this month 💵",
+                          child: TextFormField(
+                            controller: _cashAmountController,
+                            keyboardType: TextInputType.number,
+                            decoration: _pillDecoration(
+                              hint: "Cash Amount",
+                              icon: Icons.currency_rupee,
+                            ),
+                            validator: (v) {
+                              final amt = double.tryParse(v ?? '');
+                              if (amt == null || amt <= 0) {
+                                return 'Enter valid amount';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      )
+                    else
+                      _sectionContainer(child: _buildOnlineBankField()),
 
-                            if (done != "true") {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (!mounted) return;
+                    //  Total online
+                    if (_mode == 'Online')
+                      Showcase(
+                        key: _totalKey,
+                        description:
+                            "This is total online budget (sum of all banks) 📌",
+                        child: Container(
+                          margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.blue.withOpacity(0.10),
+                                Colors.blue.withOpacity(0.05),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            children: [
+                              const Text(
+                                "Total Online Budget",
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const Spacer(),
+                              Text(
+                                "₹${_onlineTotal.toStringAsFixed(2)}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
 
-                                ShowCaseWidget.of(context).startShowCase([
-                                  _onlineBanksKey,
-                                  _totalKey,
-                                  _saveKey,
-                                ]);
-                              });
+                    const SizedBox(height: 6),
 
-                              await _secureStorage.write(
-                                key: _addBudgetOnlineTourDoneKey,
-                                value: "true",
-                              );
-                            }
-                          }
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Budget Mode',
+                    // Save button
+                    Showcase(
+                      key: _saveKey,
+                      description: "Tap here to save your budget ✅",
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: SizedBox(
+                          height: 52,
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _saveBudget,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              "Save Budget",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _mode == 'Cash'
-                  ? _sectionCard(
-                      child: Showcase(
-                        key: _cashAmountKey,
-                        description:
-                            "Enter the cash budget amount for this month 💵",
-                        child: TextFormField(
-                          controller: _cashAmountController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Cash Amount',
-                          ),
-                          validator: (v) {
-                            final amt = double.tryParse(v ?? '');
-                            if (amt == null || amt <= 0) {
-                              return 'Enter valid amount';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                    )
-                  : _sectionCard(child: _buildOnlineBankField()),
-              if (_mode == 'Online')
-                Showcase(
-                  key: _totalKey,
-                  description:
-                      "This is total online budget (sum of all banks) 📌",
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('Total Budget'),
-                        const Spacer(),
-                        Text(
-                          '₹${_onlineTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 24),
-              Showcase(
-                key: _saveKey,
-                description: "Tap here to save your budget ✅",
-                child: SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _saveBudget,
-                    child: const Text('Save Budget'),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

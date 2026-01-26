@@ -18,47 +18,84 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkSession() async {
-    // Small delay to show splash briefly
     await Future.delayed(const Duration(seconds: 2));
 
     final session = supabase.auth.currentSession;
 
-    if (!mounted) return; // prevent navigation errors
+    if (!mounted) return;
 
     if (session != null && session.user != null) {
-      // ✅ user is already logged in
       Navigator.pushReplacementNamed(context, '/home');
     } else {
-      // ⛔ no active session, go to login
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.account_balance_wallet,
-              size: 60,
-              color: Colors.blueAccent,
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue, Color(0xFF1E88E5)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
+            margin: const EdgeInsets.symmetric(horizontal: 26),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            SizedBox(height: 16),
-            Text(
-              "WalletWatch",
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueAccent,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ✅ LOGO IMAGE FROM ASSET
+                Image.asset(
+                  "assets/icon.png",
+                  height: 90,
+                  width: 90,
+                  fit: BoxFit.contain,
+                ),
+
+                const SizedBox(height: 14),
+
+                const Text(
+                  "WalletWatch",
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+
+                const SizedBox(height: 6),
+
+                const Text(
+                  "Track. Save. Control.",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+              ],
             ),
-            SizedBox(height: 20),
-            CircularProgressIndicator(color: Colors.blueAccent),
-          ],
+          ),
         ),
       ),
     );

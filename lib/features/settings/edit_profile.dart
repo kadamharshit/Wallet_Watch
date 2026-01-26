@@ -78,7 +78,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       await supabase
           .from('users')
           .update({
-            // 'id': user.id,
             'name': nameController.text.trim(),
             'mobile': mobileController.text.trim(),
             'dob': dobController.text.trim(),
@@ -106,13 +105,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Change Password'),
         content: TextField(
           controller: controller,
           obscureText: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'New Password',
             hintText: 'Minimum 8 characters',
+            filled: true,
+            fillColor: const Color(0xFFF6F6F6),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
         actions: [
@@ -142,6 +148,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 );
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
             child: const Text('Update'),
           ),
         ],
@@ -149,7 +162,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  //-----------------dob ----------------------
   Future<void> _pickDob() async {
     DateTime initialDate = DateTime.now().subtract(
       const Duration(days: 365 * 18),
@@ -175,159 +187,292 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue, Color(0xFF1E88E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              "My Profile",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Container(
+            height: 40,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.person_outline, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFF6F6F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back),
-        ),
-        foregroundColor: Colors.white,
-        backgroundColor: Colors.blue,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                autovalidateMode: _autoValidate,
-                child: ListView(
-                  children: [
-                    _buildTextField(
-                      label: 'Full Name',
-                      controller: nameController,
-                      validator: (value) =>
-                          value!.isEmpty ? 'Enter your name' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      label: 'Mobile Number',
-                      controller: mobileController,
-                      keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value!.isEmpty) return 'Enter your mobile number';
-                        if (!RegExp(r'^[0-9]{10}$').hasMatch(value.trim())) {
-                          return 'Enter a valid 10-digit number';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.blue),
+                    )
+                  : Form(
+                      key: _formKey,
+                      autovalidateMode: _autoValidate,
+                      child: ListView(
+                        padding: const EdgeInsets.only(top: 10, bottom: 18),
                         children: [
-                          const Icon(Icons.email, color: Colors.grey),
-                          const SizedBox(width: 12),
-                          Expanded(
+                          _sectionContainer(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Email Address',
+                                  "Personal Information",
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  emailController.text,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                                const SizedBox(height: 14),
+                                TextFormField(
+                                  controller: nameController,
+                                  validator: (value) =>
+                                      value!.isEmpty ? 'Enter your name' : null,
+                                  decoration: _pillDecoration(
+                                    hint: "Full Name",
+                                    icon: Icons.person_outline,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: mobileController,
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value!.isEmpty) {
+                                      return 'Enter your mobile number';
+                                    }
+                                    if (!RegExp(
+                                      r'^[0-9]{10}$',
+                                    ).hasMatch(value.trim())) {
+                                      return 'Enter a valid 10-digit number';
+                                    }
+                                    return null;
+                                  },
+                                  decoration: _pillDecoration(
+                                    hint: "Mobile Number",
+                                    icon: Icons.phone_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                InkWell(
+                                  onTap: _pickDob,
+                                  child: IgnorePointer(
+                                    child: TextFormField(
+                                      controller: dobController,
+                                      readOnly: true,
+                                      decoration: _pillDecoration(
+                                        hint: "Date of Birth (optional)",
+                                        icon: Icons.calendar_month_outlined,
+                                        suffixIcon: const Icon(
+                                          Icons.edit_calendar_outlined,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(
-                            Icons.lock_outline,
-                            size: 18,
-                            color: Colors.grey,
+                          _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Account",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF6F6F6),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: Colors.blue
+                                            .withOpacity(0.12),
+                                        child: const Icon(
+                                          Icons.email_outlined,
+                                          color: Colors.blue,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              "Email (Read-only)",
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              emailController.text,
+                                              style: const TextStyle(
+                                                fontSize: 15.5,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.lock_outline,
+                                        size: 18,
+                                        color: Colors.grey,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.save),
+                                    label: const Text(
+                                      'Save Changes',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                    ),
+                                    onPressed: _isLoading ? null : _saveProfile,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: OutlinedButton.icon(
+                                    icon: const Icon(Icons.lock_outline),
+                                    label: const Text(
+                                      'Change Password',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.blue,
+                                      side: const BorderSide(
+                                        color: Colors.blue,
+                                        width: 1.3,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                    ),
+                                    onPressed: _showChangePasswordDialog,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-
-                    const SizedBox(height: 16),
-                    InkWell(
-                      onTap: _pickDob,
-                      child: IgnorePointer(
-                        child: _buildTextField(
-                          label: 'Date of Birth',
-                          controller: dobController,
-                          readOnly: true,
-                          hint: 'YYYY-MM-DD',
-                          validator: (value) {
-                            if (value == null || value.isEmpty)
-                              return null; // optional
-                            return null;
-                          },
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save Changes'),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: _isLoading ? null : _saveProfile,
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.lock_outline),
-                      label: const Text('Change Password'),
-                      onPressed: _showChangePasswordDialog,
-                    ),
-                  ],
-                ),
-              ),
             ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    String? hint,
-    required TextEditingController controller,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
-    bool readOnly = false,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
-      readOnly: readOnly,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        suffixIcon: label == 'Date of Birth'
-            ? const Icon(Icons.calendar_today)
-            : null,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
+          ],
         ),
       ),
     );
