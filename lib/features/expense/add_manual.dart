@@ -73,10 +73,51 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     super.initState();
     _fetchAvailableBanks();
     _syncPendingExpenses();
-    _loadRecentTravels();
+    _loadMostUsedTravels();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startAddExpenseTourOnlyOnce();
+    });
+  }
+
+  Future<void> _loadMostUsedTravels() async {
+    final expenses = await DatabaseHelper.instance.getExpenses();
+
+    final Map<String, Map<String, dynamic>> freqMap = {};
+
+    for (final e in expenses) {
+      if (e['category'] != 'Travel') continue;
+
+      final raw = (e['items'] ?? '').toString();
+      if (raw.isEmpty) continue;
+
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List && decoded.isNotEmpty) {
+          final item = decoded.first;
+
+          final key = "${item['mode']}|${item['start']}|${item['destination']}";
+
+          if (!freqMap.containsKey(key)) {
+            freqMap[key] = {'count': 1, 'expense': e};
+          } else {
+            freqMap[key]!['count']++;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // sort by frequency desc
+    final sorted = freqMap.values.toList()
+      ..sort((a, b) => b['count'].compareTo(a['count']));
+
+    setState(() {
+      _recentTravels = sorted
+          .take(5)
+          .map<Map<String, dynamic>>(
+            (e) => Map<String, dynamic>.from(e['expense']),
+          )
+          .toList();
     });
   }
 
@@ -189,45 +230,46 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   void _applyTravelTemplate(Map<String, dynamic> exp) {
-    final itemsRaw = (exp['items'] ?? '').toString().trim();
+    final raw = (exp['items'] ?? '').toString().trim();
 
-    String tMode = '';
-    String tStart = '';
-    String tDest = '';
+    if (raw.isEmpty) return;
 
-    if (itemsRaw.isNotEmpty) {
-      final firstLine = itemsRaw.split('\n').first;
-      final parts = firstLine.split('|').map((e) => e.trim()).toList();
+    try {
+      final decoded = jsonDecode(raw);
 
-      if (parts.length >= 3) {
-        tMode = parts[0];
-        tStart = parts[1];
-        tDest = parts[2];
+      if (decoded is List && decoded.isNotEmpty) {
+        final first = decoded.first as Map<String, dynamic>;
+
+        setState(() {
+          _selectedCategory = "Travel";
+          _shopController.text = (exp['shop'] ?? '').toString();
+
+          _selectedPaymentMode = (exp['mode'] ?? 'Cash').toString();
+          _selectedBank = (exp['bank'] ?? '').toString().isNotEmpty
+              ? exp['bank']
+              : null;
+
+          _travelModeController.text = (first['mode'] ?? '').toString();
+          _travelStartController.text = (first['start'] ?? '').toString();
+          _travelDestController.text = (first['destination'] ?? '').toString();
+          _travelAmountController.clear();
+
+          itemInputs = [
+            {
+              "mode": _travelModeController.text,
+              "start": _travelStartController.text,
+              "destination": _travelDestController.text,
+              "amount": "",
+            },
+          ];
+
+          total = 0.0;
+          _showItemsSection = true;
+        });
       }
+    } catch (e) {
+      debugPrint("Failed to apply travel template: $e");
     }
-
-    setState(() {
-      _selectedCategory = "Travel";
-      _shopController.text = (exp['shop'] ?? '').toString();
-
-      _selectedPaymentMode = (exp['mode'] ?? 'Cash').toString();
-
-      _selectedBank = (exp['bank'] ?? '').toString().isNotEmpty
-          ? exp['bank']
-          : null;
-
-      _travelModeController.text = tMode;
-      _travelStartController.text = tStart;
-      _travelDestController.text = tDest;
-      _travelAmountController.clear();
-
-      itemInputs = [
-        {"mode": tMode, "start": tStart, "destination": tDest, "amount": ""},
-      ];
-
-      total = 0.0;
-      _showItemsSection = true;
-    });
   }
 
   Future<void> _saveExpense() async {
@@ -323,7 +365,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       context,
     ).showSnackBar(const SnackBar(content: Text("Expense saved")));
 
-    Navigator.pushReplacementNamed(context, '/home');
+    Navigator.pop(context, true);
   }
 
   Future<void> _pickDate() async {
@@ -794,8 +836,33 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                               runSpacing: 8,
                               children: _recentTravels.map((t) {
                                 final shop = (t['shop'] ?? '').toString();
+                                final mode = (t['mode'] ?? 'Cash').toString();
+
+                                final bool isOnline =
+                                    mode.toLowerCase() == 'online';
+
                                 return ActionChip(
-                                  label: Text(shop.isEmpty ? "Travel" : shop),
+                                  label: Text(
+                                    shop.isEmpty ? "Travel" : shop,
+                                    style: TextStyle(
+                                      color: isOnline
+                                          ? Colors.blue.shade800
+                                          : Colors.green.shade800,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  backgroundColor: isOnline
+                                      ? Colors.blue.shade50
+                                      : Colors.green.shade50,
+                                  avatar: Icon(
+                                    isOnline
+                                        ? Icons.account_balance
+                                        : Icons.directions_bus,
+                                    color: isOnline
+                                        ? Colors.blue
+                                        : Colors.green,
+                                    size: 18,
+                                  ),
                                   onPressed: () => _applyTravelTemplate(t),
                                 );
                               }).toList(),
