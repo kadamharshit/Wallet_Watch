@@ -66,7 +66,12 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   }
 
   Future<void> _loadBudgetsForMonth(String month) async {
-    final allBudgets = await DatabaseHelper.instance.getBudget();
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final allBudgets = await DatabaseHelper.instance.getBudget(
+      user.id,
+    ); // ✅ FIX
 
     final months =
         allBudgets

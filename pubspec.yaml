@@ -47,6 +47,7 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^12.0.1
   excel: ^4.0.6
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

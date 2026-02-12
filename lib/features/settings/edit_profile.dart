@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:walletwatch/services/expense_database.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -30,14 +31,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Future<void> _fetchUserProfile() async {
     final user = supabase.auth.currentUser;
-    debugPrint("current user in editprofile: $user");
+
     if (user == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacementNamed(context, '/login');
-      });
+      Navigator.pushReplacementNamed(context, '/login');
       return;
     }
 
+    // STEP 1: Load from SQLite first (instant)
+    final local = await DatabaseHelper.instance.getUserProfile(user.id);
+
+    if (local != null) {
+      nameController.text = local['name'] ?? '';
+      mobileController.text = local['mobile'] ?? '';
+      emailController.text = local['email'] ?? '';
+      dobController.text = local['dob'] ?? '';
+    }
+
+    setState(() => _isLoading = false);
+
+    // STEP 2: Try Supabase sync in background
     try {
       final response = await supabase
           .from('users')
@@ -50,16 +62,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
         mobileController.text = response['mobile'] ?? '';
         emailController.text = response['email'] ?? '';
         dobController.text = response['dob'] ?? '';
+
+        // STEP 3: Save to SQLite cache
+        await DatabaseHelper.instance.upsertUserProfile({
+          'user_id': user.id,
+          'name': nameController.text.trim(),
+          'email': emailController.text.trim(),
+          'mobile': mobileController.text.trim(),
+          'dob': dobController.text.trim(),
+        });
+
+        setState(() {});
       }
-    } catch (e) {
-      debugPrint('Error loading profile: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to load profile')));
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+    } catch (_) {
+      // offline — ignore silently
+      debugPrint("Offline mode: loaded profile from cache");
     }
   }
 
@@ -75,6 +92,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _isLoading = true);
 
     try {
+      // 1. Update Supabase
       await supabase
           .from('users')
           .update({
@@ -84,6 +102,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
           })
           .eq('id', user.id);
 
+      // 2. Update SQLite cache (IMPORTANT FIX)
+      await DatabaseHelper.instance.upsertUserProfile({
+        'user_id': user.id,
+        'name': nameController.text.trim(),
+        'email': emailController.text.trim(),
+        'mobile': mobileController.text.trim(),
+        'dob': dobController.text.trim(),
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully')),
@@ -91,6 +118,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     } catch (e) {
       debugPrint('Error saving profile: $e');
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Failed to update profile')));
@@ -130,21 +158,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
             onPressed: () async {
               if (controller.text.length < 8) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Password too short')),
+                  const SnackBar(
+                    content: Text('Password must be at least 8 characters'),
+                  ),
                 );
                 return;
               }
 
-              await supabase.auth.updateUser(
-                UserAttributes(password: controller.text),
-              );
+              try {
+                await supabase.auth.updateUser(
+                  UserAttributes(password: controller.text),
+                );
 
-              if (mounted) {
-                Navigator.pop(context);
+                if (mounted) {
+                  Navigator.pop(context);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Password updated successfully'),
+                    ),
+                  );
+                }
+              } on AuthException catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.message)));
+              } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password updated successfully'),
-                  ),
+                  const SnackBar(content: Text('Password update failed')),
                 );
               }
             },

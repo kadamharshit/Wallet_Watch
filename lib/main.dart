@@ -14,6 +14,7 @@ import 'package:walletwatch/features/settings/budget_tracker.dart';
 import 'package:walletwatch/features/settings/edit_profile.dart';
 import 'package:walletwatch/features/settings/expense_tracker.dart';
 import 'package:walletwatch/features/settings/how_to_use.dart';
+//import 'package:walletwatch/features/settings/shopping_list_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,7 @@ class MyApp extends StatelessWidget {
         '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
         "/export_report": (context) => const ExportReportPage(),
+        //"/shopping_list": (context) => const ShoppingListPage(),
       },
     );
   }

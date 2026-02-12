@@ -79,14 +79,34 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _initialSupabaseToLocalSync(User user) async {
+    // ✅ ALWAYS sync profile
+    final profile = await supabase
+        .from('users')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (profile != null) {
+      await DatabaseHelper.instance.upsertUserProfile({
+        'user_id': user.id,
+        'name': profile['name'] ?? '',
+        'email': profile['email'] ?? '',
+        'mobile': profile['mobile'] ?? '',
+        'dob': profile['dob'] ?? '',
+      });
+
+      debugPrint("User profile synced");
+    }
+
+    // ✅ Only skip expenses/budgets if exist
     final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
     if (!isEmpty) {
-      debugPrint("Local DB already has data. Skipping initial sync.");
+      debugPrint("Expenses/Budgets already exist. Skipping their sync.");
       return;
     }
 
-    debugPrint("Local DB empty. Syncing from Supabase...");
+    debugPrint("Syncing expenses & budgets...");
 
     final expenses = await supabase
         .from('expenses')
@@ -101,6 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
     for (final e in expenses) {
       await DatabaseHelper.instance.upsertExpenseByUuid({
         'uuid': e['uuid'],
+        'user_id': user.id,
         'supabase_id': e['id'],
         'date': e['date'],
         'shop': e['shop'],
@@ -116,6 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
     for (final b in budgets) {
       await DatabaseHelper.instance.insertBudget({
         'uuid': b['uuid'],
+        'user_id': user.id,
         'supabase_id': b['id'],
         'date': b['date'],
         'mode': b['mode'],
@@ -125,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     }
 
-    debugPrint("Initial Supabase → SQLite sync completed.");
+    debugPrint("Full sync complete");
   }
 
   @override
