@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/features/expense/edit_expense.dart';
 import 'package:walletwatch/services/expense_database.dart';
@@ -20,7 +21,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   final supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> _expenses = [];
-  bool _isLoading = true;
+  //bool _isLoading = true;
+  bool _hasLoadedLocal = false;
   bool _isOnline = false;
 
   String _filterMode = 'All';
@@ -91,56 +93,144 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   }
 
   Future<void> _loadExpenses() async {
-    setState(() => _isLoading = true);
-
-    _isOnline = await _checkConnection();
+    // STEP 1: Load local instantly
     final user = supabase.auth.currentUser;
+    if (user == null) return;
 
-    if (_isOnline && user != null) {
-      await _syncLocalToSupabase();
-    }
+    final localExpenses = await DatabaseHelper.instance.getExpenses(user.id);
 
-    if (_isOnline && user != null) {
-      try {
-        final response = await supabase
-            .from('expenses')
-            .select()
-            .eq('user_id', user.id)
-            .order('date', ascending: false);
+    if (!mounted) return;
 
-        final serverExpenses = List<Map<String, dynamic>>.from(response);
+    setState(() {
+      _expenses = localExpenses;
+      _buildAvailableMonths(_expenses);
+      _hasLoadedLocal = true;
+    });
 
-        for (final exp in serverExpenses) {
-          await DatabaseHelper.instance.upsertExpenseByUuid({
-            'uuid': exp['uuid'],
-            'supabase_id': exp['id'],
-            'date': exp['date'],
-            'shop': exp['shop'] ?? '',
-            'category': exp['category'] ?? '',
-            'items': exp['items'] ?? '',
-            'total': exp['total'] ?? 0,
-            'mode': exp['mode'] ?? 'Cash',
-            'bank': exp['bank'] ?? '',
-            'synced': 1,
-          });
-        }
-
-        _expenses = await DatabaseHelper.instance.getExpenses();
-      } catch (e) {
-        debugPrint("Supabase fetch error: $e");
-        _expenses = await DatabaseHelper.instance.getExpenses();
-      }
-    } else {
-      _expenses = await DatabaseHelper.instance.getExpenses();
-    }
-
-    _buildAvailableMonths(_expenses);
-
-    setState(() => _isLoading = false);
+    // STEP 2: Sync in background (DO NOT await)
+    _syncExpensesInBackground();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startExpenseTrackerTourOnlyOnce();
     });
+  }
+
+  Future<void> _syncExpensesInBackground() async {
+    final isOnline = await _checkConnection();
+    final user = supabase.auth.currentUser;
+
+    if (!isOnline || user == null) return;
+
+    try {
+      // Sync local unsynced expenses
+      await _syncLocalToSupabase();
+
+      // Fetch latest from Supabase
+      final response = await supabase
+          .from('expenses')
+          .select()
+          .eq('user_id', user.id)
+          .order('date', ascending: false);
+
+      final serverExpenses = List<Map<String, dynamic>>.from(response);
+
+      for (final exp in serverExpenses) {
+        await DatabaseHelper.instance.upsertExpenseByUuid({
+          'uuid': exp['uuid'],
+          'user_id': user.id,
+          'supabase_id': exp['id'],
+          'date': exp['date'],
+          'shop': exp['shop'] ?? '',
+          'category': exp['category'] ?? '',
+          'items': exp['items'] ?? '',
+          'total': exp['total'] ?? 0,
+          'mode': exp['mode'] ?? 'Cash',
+          'bank': exp['bank'] ?? '',
+          'synced': 1,
+        });
+      }
+
+      // Reload updated data silently
+      final updatedExpenses = await DatabaseHelper.instance.getExpenses(
+        user.id,
+      );
+
+      if (!mounted) return;
+
+      if (mounted && !_listEqualsByUuid(_expenses, updatedExpenses)) {
+        setState(() {
+          _expenses = updatedExpenses;
+          _buildAvailableMonths(_expenses);
+        });
+      }
+    } catch (e) {
+      debugPrint("Background sync error: $e");
+    }
+  }
+
+  bool _listEqualsByUuid(
+    List<Map<String, dynamic>> a,
+    List<Map<String, dynamic>> b,
+  ) {
+    if (a.length != b.length) return false;
+
+    for (int i = 0; i < a.length; i++) {
+      if (a[i]['uuid'] != b[i]['uuid']) return false;
+    }
+
+    return true;
+  }
+
+  // -----------------Shimmer effect---------------------
+  Widget _buildShimmerList() {
+    return Column(
+      children: List.generate(4, (index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            children: [
+              Shimmer.fromColors(
+                baseColor: Colors.grey.shade300,
+                highlightColor: Colors.grey.shade100,
+                child: CircleAvatar(radius: 20, backgroundColor: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Shimmer.fromColors(
+                      baseColor: Colors.grey.shade300,
+                      highlightColor: Colors.grey.shade100,
+                      child: Container(
+                        height: 12,
+                        width: 140,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Shimmer.fromColors(
+                      baseColor: Colors.grey.shade300,
+                      highlightColor: Colors.grey.shade100,
+                      child: Container(
+                        height: 10,
+                        width: 100,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
   }
 
   Widget _infoRow(String label, dynamic value) {
@@ -373,7 +463,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses();
+    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses(user.id);
 
     for (final exp in unsynced) {
       try {
@@ -775,397 +865,365 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refreshExpenses,
-                child: _isLoading
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [
-                          SizedBox(height: 260),
-                          Center(child: CircularProgressIndicator()),
-                        ],
-                      )
-                    : ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(top: 6, bottom: 18),
-                        children: [
-                          if (_availableMonths.isNotEmpty)
-                            Showcase(
-                              key: _monthKey,
-                              description:
-                                  "Select month to see expenses for that month",
-                              child: _sectionContainer(
-                                child: DropdownButtonFormField<String>(
-                                  value:
-                                      _availableMonths.contains(_selectedMonth)
-                                      ? _selectedMonth
-                                      : null,
-                                  decoration: _pillDecoration(
-                                    hint: "Select Month",
-                                    icon: Icons.calendar_month,
-                                  ),
-                                  items: _availableMonths
-                                      .map(
-                                        (m) => DropdownMenuItem(
-                                          value: m,
-                                          child: Text(
-                                            DateFormat(
-                                              'MMMM yyyy',
-                                            ).format(DateTime.parse('$m-01')),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setState(() => _selectedMonth = value);
-                                    }
-                                  },
-                                ),
-                              ),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(top: 6, bottom: 18),
+                  children: [
+                    if (_availableMonths.isNotEmpty)
+                      Showcase(
+                        key: _monthKey,
+                        description:
+                            "Select month to see expenses for that month",
+                        child: _sectionContainer(
+                          child: DropdownButtonFormField<String>(
+                            value: _availableMonths.contains(_selectedMonth)
+                                ? _selectedMonth
+                                : null,
+                            decoration: _pillDecoration(
+                              hint: "Select Month",
+                              icon: Icons.calendar_month,
                             ),
-                          Showcase(
-                            key: _chartKey,
-                            description: "Shows Cash vs Online expense split",
-                            child: _sectionContainer(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Expense Breakdown",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                            items: _availableMonths
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(
+                                      DateFormat(
+                                        'MMMM yyyy',
+                                      ).format(DateTime.parse('$m-01')),
                                     ),
                                   ),
-                                  const SizedBox(height: 10),
-                                  _buildExpensePieChart(),
-                                  const SizedBox(height: 10),
-                                  _buildPieLegend(),
-                                ],
-                              ),
-                            ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedMonth = value);
+                              }
+                            },
                           ),
-                          Showcase(
-                            key: _summaryKey,
-                            description:
-                                "This shows total, cash and online spending for the month",
-                            child: _sectionContainer(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Summary",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    "₹${_grandTotal.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(
-                                              0.10,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                "Cash",
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                "₹${_totalCash.toStringAsFixed(2)}",
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.green,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.withOpacity(
-                                              0.10,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                "Online",
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                "₹${_totalOnline.toStringAsFixed(2)}",
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Showcase(
-                                    key: _filterKey,
-                                    description:
-                                        "Filter expenses by payment mode: All / Cash / Online",
-                                    child: Wrap(
-                                      spacing: 8,
-                                      children: ['All', 'Cash', 'Online']
-                                          .map(
-                                            (m) => ChoiceChip(
-                                              label: Text(m),
-                                              selected: _filterMode == m,
-                                              selectedColor: Colors.blue
-                                                  .withOpacity(0.18),
-                                              labelStyle: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: _filterMode == m
-                                                    ? Colors.blue
-                                                    : Colors.black,
-                                              ),
-                                              onSelected: (_) => setState(
-                                                () => _filterMode = m,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
-                                ],
+                        ),
+                      ),
+                    Showcase(
+                      key: _chartKey,
+                      description: "Shows Cash vs Online expense split",
+                      child: _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Expense Breakdown",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
-                          ),
-                          Showcase(
-                            key: _listKey,
-                            description:
-                                "Tap any expense to see details. Swipe to Edit/Delete",
-                            child: _filteredExpenses.isEmpty
-                                ? _sectionContainer(
+                            const SizedBox(height: 10),
+                            _buildExpensePieChart(),
+                            const SizedBox(height: 10),
+                            _buildPieLegend(),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Showcase(
+                      key: _summaryKey,
+                      description:
+                          "This shows total, cash and online spending for the month",
+                      child: _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Summary",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "₹${_grandTotal.toStringAsFixed(2)}",
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.10),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
                                     child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Container(
-                                          height: 70,
-                                          width: 70,
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.withOpacity(
-                                              0.12,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.receipt_long,
-                                            color: Colors.blue,
-                                            size: 38,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
                                         const Text(
-                                          "No expenses found",
+                                          "Cash",
                                           style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                        const SizedBox(height: 6),
+                                        const SizedBox(height: 4),
                                         Text(
-                                          "Try selecting a different month or add a new expense.",
-                                          style: TextStyle(
-                                            color: Colors.grey.shade700,
-                                            fontSize: 13,
+                                          "₹${_totalCash.toStringAsFixed(2)}",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green,
                                           ),
-                                          textAlign: TextAlign.center,
                                         ),
                                       ],
                                     ),
-                                  )
-                                : Column(
-                                    children: _groupedByDate.entries.map((
-                                      entry,
-                                    ) {
-                                      final dateTotal = entry.value
-                                          .fold<double>(
-                                            0,
-                                            (sum, e) =>
-                                                sum +
-                                                (e['total'] as num).toDouble(),
-                                          );
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.10),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          "Online",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          "₹${_totalOnline.toStringAsFixed(2)}",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Showcase(
+                              key: _filterKey,
+                              description:
+                                  "Filter expenses by payment mode: All / Cash / Online",
+                              child: Wrap(
+                                spacing: 8,
+                                children: ['All', 'Cash', 'Online']
+                                    .map(
+                                      (m) => ChoiceChip(
+                                        label: Text(m),
+                                        selected: _filterMode == m,
+                                        selectedColor: Colors.blue.withOpacity(
+                                          0.18,
+                                        ),
+                                        labelStyle: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: _filterMode == m
+                                              ? Colors.blue
+                                              : Colors.black,
+                                        ),
+                                        onSelected: (_) =>
+                                            setState(() => _filterMode = m),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Showcase(
+                      key: _listKey,
+                      description:
+                          "Tap any expense to see details. Swipe to Edit/Delete",
+                      child: !_hasLoadedLocal
+                          ? _buildShimmerList() // or shimmer
+                          : _filteredExpenses.isEmpty
+                          ? _sectionContainer(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    height: 70,
+                                    width: 70,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Icon(
+                                      Icons.receipt_long,
+                                      color: Colors.blue,
+                                      size: 38,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    "No expenses found",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Try selecting a different month or add a new expense.",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Column(
+                              children: _groupedByDate.entries.map((entry) {
+                                final dateTotal = entry.value.fold<double>(
+                                  0,
+                                  (sum, e) =>
+                                      sum + (e['total'] as num).toDouble(),
+                                );
 
-                                      return Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsets.fromLTRB(
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        18,
+                                        14,
+                                        18,
+                                        4,
+                                      ),
+                                      child: Text(
+                                        "${_formatDate(entry.key)} • ₹${dateTotal.toStringAsFixed(2)}",
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14.5,
+                                        ),
+                                      ),
+                                    ),
+                                    ...entry.value.map((e) {
+                                      return Dismissible(
+                                        key: ValueKey(e['uuid']),
+                                        direction: DismissDirection.horizontal,
+
+                                        background: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue,
+                                            borderRadius: BorderRadius.circular(
                                               18,
-                                              14,
-                                              18,
-                                              4,
-                                            ),
-                                            child: Text(
-                                              "${_formatDate(entry.key)} • ₹${dateTotal.toStringAsFixed(2)}",
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14.5,
-                                              ),
                                             ),
                                           ),
-                                          ...entry.value.map((e) {
-                                            return Dismissible(
-                                              key: ValueKey(e['uuid']),
-                                              direction:
-                                                  DismissDirection.horizontal,
-
-                                              background: Container(
-                                                margin:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 16,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.blue,
-                                                  borderRadius:
-                                                      BorderRadius.circular(18),
-                                                ),
-                                                alignment: Alignment.centerLeft,
-                                                padding: const EdgeInsets.only(
-                                                  left: 18,
-                                                ),
-                                                child: const Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.edit,
-                                                      color: Colors.white,
-                                                    ),
-                                                    SizedBox(width: 8),
-                                                    Text(
-                                                      'Edit',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
+                                          alignment: Alignment.centerLeft,
+                                          padding: const EdgeInsets.only(
+                                            left: 18,
+                                          ),
+                                          child: const Row(
+                                            children: [
+                                              Icon(
+                                                Icons.edit,
+                                                color: Colors.white,
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Edit',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
+                                            ],
+                                          ),
+                                        ),
 
-                                              secondaryBackground: Container(
-                                                margin:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 16,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.redAccent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(18),
-                                                ),
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                padding: const EdgeInsets.only(
-                                                  right: 18,
-                                                ),
-                                                child: const Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      'Delete',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                    SizedBox(width: 8),
-                                                    Icon(
-                                                      Icons.delete,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ],
+                                        secondaryBackground: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.redAccent,
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                          ),
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.only(
+                                            right: 18,
+                                          ),
+                                          child: const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                'Delete',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
                                               ),
+                                              SizedBox(width: 8),
+                                              Icon(
+                                                Icons.delete,
+                                                color: Colors.white,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
 
-                                              confirmDismiss: (direction) async {
-                                                if (direction ==
-                                                    DismissDirection
-                                                        .startToEnd) {
-                                                  await Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          EditExpensePage(
-                                                            expense: e,
-                                                          ),
-                                                    ),
-                                                  );
-                                                  await _loadExpenses();
-                                                  return false;
-                                                }
-
-                                                if (direction ==
-                                                    DismissDirection
-                                                        .endToStart) {
-                                                  final confirm =
-                                                      await _confirmDeleteDialog();
-                                                  if (confirm) {
-                                                    await _deleteExpense(e);
-                                                  }
-                                                  return confirm;
-                                                }
-
-                                                return false;
-                                              },
-
-                                              child: _buildExpenseCard(e),
+                                        confirmDismiss: (direction) async {
+                                          if (direction ==
+                                              DismissDirection.startToEnd) {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    EditExpensePage(expense: e),
+                                              ),
                                             );
-                                          }),
-                                        ],
+                                            await _loadExpenses();
+                                            return false;
+                                          }
+
+                                          if (direction ==
+                                              DismissDirection.endToStart) {
+                                            final confirm =
+                                                await _confirmDeleteDialog();
+                                            if (confirm) {
+                                              await _deleteExpense(e);
+                                            }
+                                            return confirm;
+                                          }
+
+                                          return false;
+                                        },
+
+                                        child: _buildExpenseCard(e),
                                       );
-                                    }).toList(),
-                                  ),
-                          ),
-                        ],
-                      ),
+                                    }),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

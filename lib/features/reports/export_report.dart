@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -19,6 +20,7 @@ class ExportReportPage extends StatefulWidget {
 
 class _ExportReportPageState extends State<ExportReportPage> {
   bool _isLoading = true;
+  final supabase = Supabase.instance.client;
 
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
@@ -47,8 +49,11 @@ class _ExportReportPageState extends State<ExportReportPage> {
   Future<void> _loadMonthsAndData() async {
     setState(() => _isLoading = true);
 
-    final expenses = await DatabaseHelper.instance.getExpenses();
-    final budgets = await DatabaseHelper.instance.getBudget();
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
+    final budgets = await DatabaseHelper.instance.getBudget(user.id);
 
     final months = <String>{};
 

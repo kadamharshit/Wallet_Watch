@@ -72,13 +72,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Account created! Please confirm your email before login.",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Account created!!")));
 
       Navigator.pushReplacementNamed(context, '/login');
     } on AuthException catch (e) {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -57,6 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return "$percent% of budget used";
   }
 
+  Map<String, dynamic>? _activeShoppingList;
+  List<Map<String, dynamic>> _shoppingItems = [];
+
   // ---------------- Lifecycle ----------------
   @override
   void initState() {
@@ -68,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadUserInfo();
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
+    //await _loadShoppingList();
 
     if (!mounted) return;
 
@@ -83,17 +89,47 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final response = await supabase
-        .from('users')
-        .select()
-        .eq('id', user.id)
-        .maybeSingle();
+    // STEP 1: Load from SQLite instantly
+    final local = await DatabaseHelper.instance.getUserProfile(user.id);
 
-    if (response != null) {
+    if (local != null) {
       setState(() {
-        _username = response['name'] ?? 'User';
-        _useremail = response['email'] ?? '';
+        _username = local['name'] ?? 'User';
+        _useremail = local['email'] ?? '';
       });
+    }
+
+    // STEP 2: Sync from Supabase in background
+    try {
+      final response = await supabase
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (response != null) {
+        final name = response['name'] ?? 'User';
+        final email = response['email'] ?? '';
+
+        // Update UI
+        if (mounted) {
+          setState(() {
+            _username = name;
+            _useremail = email;
+          });
+        }
+
+        // Save to SQLite cache
+        await DatabaseHelper.instance.upsertUserProfile({
+          'user_id': user.id,
+          'name': name,
+          'email': email,
+          'mobile': response['mobile'] ?? '',
+          'dob': response['dob'] ?? '',
+        });
+      }
+    } catch (_) {
+      debugPrint("Offline mode: using cached user profile");
     }
   }
 
@@ -117,10 +153,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadExpensesSeparately() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final expenses = await DatabaseHelper.instance.getExpenses();
+    final expenses = await DatabaseHelper.instance.getExpenses(
+      user.id,
+    ); // ✅ FIXED
 
     double cash = 0.0;
     double online = 0.0;
@@ -130,9 +171,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (date != null && date.startsWith(currentMonth)) {
         final amount = (item['total'] as num?)?.toDouble() ?? 0.0;
         final mode = (item['mode'] ?? 'Cash').toString().toLowerCase();
-        mode == 'online' ? online += amount : cash += amount;
+
+        if (mode == 'online') {
+          online += amount;
+        } else {
+          cash += amount;
+        }
       }
     }
+
+    if (!mounted) return;
 
     setState(() {
       _cashExpense = cash;
@@ -141,10 +189,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadBudgetsSeparately() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final budgets = await DatabaseHelper.instance.getBudget();
+    final budgets = await DatabaseHelper.instance.getBudget(user.id); // ✅ FIXED
 
     double cash = 0.0;
     double online = 0.0;
@@ -156,8 +207,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
       final mode = (entry['mode'] ?? 'Cash').toString();
 
-      mode == 'Online' ? online += amount : cash += amount;
+      if (mode == 'Online') {
+        online += amount;
+      } else {
+        cash += amount;
+      }
     }
+
+    if (!mounted) return;
 
     setState(() {
       _cashBudget = cash;
@@ -179,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshAll() async {
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
+    //await _loadShoppingList();
   }
 
   Future<void> _logout() async {
@@ -284,6 +342,54 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  //----------------LOAD SHOPPING LIST-----------------
+  // Future<void> _loadShoppingList() async {
+  //   final data = await DatabaseHelper.instance.getActiveShoppingList();
+
+  //   if (data == null) {
+  //     setState(() {
+  //       _activeShoppingList = null;
+  //       _shoppingItems = [];
+  //     });
+  //     return;
+  //   }
+
+  //   final itemsJson = data['items'] as String?;
+  //   final items = itemsJson == null || itemsJson.isEmpty
+  //       ? <Map<String, dynamic>>[]
+  //       : List<Map<String, dynamic>>.from(jsonDecode(itemsJson));
+
+  //   if (items.isEmpty) {
+  //     //  Auto-clean orphan shopping list
+  //     await DatabaseHelper.instance.clearShoppingList();
+  //     setState(() {
+  //       _activeShoppingList = null;
+  //       _shoppingItems = [];
+  //     });
+  //     return;
+  //   }
+
+  //   setState(() {
+  //     _activeShoppingList = data;
+  //     _shoppingItems = items;
+  //   });
+  // }
+
+  //---------------TOGGLE SHOPPING ITEMS----------------------
+  Future<void> _toggleShoppingItem(int index, bool value) async {
+    _shoppingItems[index]['checked'] = value;
+
+    await DatabaseHelper.instance.insertShoppingList({
+      'id': _activeShoppingList!['id'],
+      'uuid': _activeShoppingList!['uuid'],
+      'shop': _activeShoppingList!['shop'],
+      'items': jsonEncode(_shoppingItems),
+      'created_at': _activeShoppingList!['created_at'],
+    });
+
+    setState(() {});
+  }
+
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
@@ -310,6 +416,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     _buildTotalRemainingCard(),
+                    //if (_activeShoppingList != null) _buildShoppingListCard(),
+                    const SizedBox(height: 8),
                     _buildPieCard(),
                     _buildRemainingRow(),
                     const SizedBox(height: 8),
@@ -388,6 +496,85 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  //------------------------Build Shopping Cart--------------------
+  // Widget _buildShoppingListCard() {
+  //   final shop = _activeShoppingList!['shop'] ?? "Shopping List";
+
+  //   return Container(
+  //     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(18),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.06),
+  //           blurRadius: 14,
+  //           offset: const Offset(0, 6),
+  //         ),
+  //       ],
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         Row(
+  //           children: [
+  //             const Icon(Icons.shopping_cart, color: Colors.blue),
+  //             const SizedBox(width: 8),
+  //             Expanded(
+  //               child: Text(
+  //                 shop,
+  //                 style: const TextStyle(
+  //                   fontWeight: FontWeight.w700,
+  //                   fontSize: 16,
+  //                 ),
+  //               ),
+  //             ),
+  //             // TextButton(
+  //             //   onPressed: () {
+  //             //     Navigator.pushNamed(
+  //             //       context,
+  //             //       '/shopping_list',
+  //             //     ).then((_) => _loadShoppingList());
+  //             //   },
+  //             //   child: const Text("Open"),
+  //             // ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 10),
+
+  //         ..._shoppingItems.take(5).map((item) {
+  //           final index = _shoppingItems.indexOf(item);
+  //           return CheckboxListTile(
+  //             dense: true,
+  //             contentPadding: EdgeInsets.zero,
+  //             value: item['checked'] == true,
+  //             onChanged: (v) => _toggleShoppingItem(index, v ?? false),
+  //             title: Text(
+  //               item['name'],
+  //               style: TextStyle(
+  //                 decoration: item['checked'] == true
+  //                     ? TextDecoration.lineThrough
+  //                     : null,
+  //               ),
+  //             ),
+  //             subtitle: Text("${item['qty']} ${item['unit']}"),
+  //           );
+  //         }),
+
+  //         if (_shoppingItems.length > 5)
+  //           const Padding(
+  //             padding: EdgeInsets.only(top: 6),
+  //             child: Text(
+  //               "More items in list…",
+  //               style: TextStyle(color: Colors.grey),
+  //             ),
+  //           ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Widget _buildPieCard() {
     return Showcase(
@@ -585,6 +772,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 6),
             _drawerItem(Icons.person, "My Profile", '/profiles'),
             _drawerItem(Icons.info, "About Us", '/about'),
+            //_drawerItem(Icons.shopping_cart, "Shopping List", '/shopping_list'),
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),

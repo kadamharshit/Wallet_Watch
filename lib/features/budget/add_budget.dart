@@ -21,6 +21,8 @@ class _AddBudgetState extends State<AddBudget> {
   String? _selectedDate;
   String _mode = 'Cash';
 
+  List<String> _existingBanks = [];
+
   final List<Map<String, dynamic>> _bankInputs = [];
 
   static const String _addBudgetOnlineTourDoneKey =
@@ -44,6 +46,7 @@ class _AddBudgetState extends State<AddBudget> {
     super.initState();
     _addBankField();
     _syncPendingBudgets();
+    _loadBanks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startAddBudgetTourOnlyOnce();
@@ -70,6 +73,17 @@ class _AddBudgetState extends State<AddBudget> {
       'amountKey': GlobalKey<FormFieldState>(),
     });
     setState(() {});
+  }
+
+  Future<void> _loadBanks() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final banks = await DatabaseHelper.instance.getUserBanks(user.id);
+
+    setState(() {
+      _existingBanks = banks;
+    });
   }
 
   void _removeBankField(int index) {
@@ -136,6 +150,7 @@ class _AddBudgetState extends State<AddBudget> {
 
         final localId = await DatabaseHelper.instance.insertBudget({
           'uuid': uuid,
+          'user_id': user.id,
           'date': date,
           'mode': 'Cash',
           'total': amount,
@@ -181,6 +196,7 @@ class _AddBudgetState extends State<AddBudget> {
 
           final localId = await DatabaseHelper.instance.insertBudget({
             'uuid': uuid,
+            'user_id': user.id, // REQUIRED FIX
             'date': date,
             'mode': 'Online',
             'total': amount,
@@ -233,7 +249,7 @@ class _AddBudgetState extends State<AddBudget> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final unsynced = await DatabaseHelper.instance.getUnsyncedBudgets();
+    final unsynced = await DatabaseHelper.instance.getUnsyncedBudgets(user.id);
 
     for (final b in unsynced) {
       try {
@@ -324,24 +340,50 @@ class _AddBudgetState extends State<AddBudget> {
               ),
               child: Column(
                 children: [
-                  Row(
+                  Column(
                     children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: c['bank'],
-                          decoration: _pillDecoration(
-                            hint: "Bank Name",
-                            icon: Icons.account_balance,
+                      DropdownButtonFormField<String>(
+                        value: _existingBanks.contains(c['bank'].text)
+                            ? c['bank'].text
+                            : null,
+                        hint: const Text("Select Bank"),
+                        items: [
+                          ..._existingBanks.map(
+                            (bank) => DropdownMenuItem(
+                              value: bank,
+                              child: Text(bank),
+                            ),
                           ),
+                          const DropdownMenuItem(
+                            value: "__new__",
+                            child: Text("+ Add New Bank"),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == "__new__") {
+                            c['bank'].text = "";
+                          } else {
+                            c['bank'].text = value!;
+                          }
+                          setState(() {});
+                        },
+                        decoration: _pillDecoration(
+                          hint: "Bank Name",
+                          icon: Icons.account_balance,
                         ),
                       ),
-                      if (_bankInputs.length > 1)
-                        IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.redAccent,
+
+                      // Show manual input if empty
+                      if (c['bank'].text.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: TextFormField(
+                            controller: c['bank'],
+                            decoration: _pillDecoration(
+                              hint: "Enter New Bank Name",
+                              icon: Icons.edit,
+                            ),
                           ),
-                          onPressed: () => _removeBankField(index),
                         ),
                     ],
                   ),

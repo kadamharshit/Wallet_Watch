@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,8 @@ class ReportsPage extends StatefulWidget {
 
 class _ReportsPageState extends State<ReportsPage> {
   bool _isLoading = true;
+
+  final supabase = Supabase.instance.client;
 
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
@@ -48,8 +51,11 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _loadReports() async {
     setState(() => _isLoading = true);
 
-    final expenses = await DatabaseHelper.instance.getExpenses();
-    final budgets = await DatabaseHelper.instance.getBudget();
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
+    final budgets = await DatabaseHelper.instance.getBudget(user.id);
 
     final months = <String>{};
 

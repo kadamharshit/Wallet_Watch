@@ -27,7 +27,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   bool _showItemsSection = false;
 
   final List<String> _units = ['pcs', 'kg', 'g', 'L', 'ml'];
-  List<Map<String, String>> itemInputs = [
+  List<Map<String, dynamic>> itemInputs = [
     {"name": "", "qty": "", "unit": "pcs", "amount": ""},
   ];
   double total = 0.0;
@@ -77,11 +77,55 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startAddExpenseTourOnlyOnce();
+      //_checkForImportedShoppingList();
     });
   }
 
+  // bool _shoppingListImported = false;
+
+  // void _checkForImportedShoppingList() {
+  //   if (_shoppingListImported) return;
+
+  //   final args =
+  //       ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+  //   if (args == null || args['source'] != 'shopping_list') return;
+
+  //   final List<Map<String, dynamic>> importedItems =
+  //       List<Map<String, dynamic>>.from(args['items'] ?? []);
+
+  //   //  filter only checked items
+  //   final checkedItems = importedItems
+  //       .where((i) => i['checked'] == true)
+  //       .toList();
+
+  //   if (checkedItems.isEmpty) return;
+
+  //   setState(() {
+  //     _shoppingListImported = true;
+  //     _showItemsSection = true;
+  //     _selectedCategory = 'Grocery';
+
+  //     _shopController.text = (args['shop'] ?? '').toString();
+
+  //     itemInputs = checkedItems.map((item) {
+  //       return {
+  //         "name": item['name'] ?? '',
+  //         "qty": item['qty']?.toString() ?? '1',
+  //         "unit": item['unit'] ?? 'pcs',
+  //         "amount": item['amount']?.toString() ?? '',
+  //       };
+  //     }).toList();
+
+  //     _updateTotal();
+  //   });
+  // }
+
   Future<void> _loadMostUsedTravels() async {
-    final expenses = await DatabaseHelper.instance.getExpenses();
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
 
     final Map<String, Map<String, dynamic>> freqMap = {};
 
@@ -150,7 +194,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final budgets = await DatabaseHelper.instance.getBudget();
+    final budgets = await DatabaseHelper.instance.getBudget(user.id);
 
     final banks = budgets
         .where((b) => b['mode'] == 'Online')
@@ -190,7 +234,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses();
+    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses(user.id);
 
     for (final exp in unsynced) {
       try {
@@ -319,6 +363,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
     final localExpense = {
       'uuid': uuid,
+      'user_id': user.id,
       'date': date,
       'shop': _shopController.text.trim(),
       'category': _selectedCategory,
