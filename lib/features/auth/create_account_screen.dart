@@ -220,9 +220,20 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             hint: "Mobile Number",
                             icon: Icons.phone_outlined,
                           ),
-                          validator: (v) => v == null || v.isEmpty
-                              ? "Enter your mobile number"
-                              : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
+                              return "Enter your mobile number";
+                            }
+                            // Check if only digits
+                            if (!RegExp(r'^[0-9]+$').hasMatch(v)) {
+                              return "Only digitis allowed";
+                            }
+                            //Check exactly 10 digits
+                            if (v.length != 10) {
+                              return "Mobile number must be exactly 10 digits";
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 14),
 
