@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/dashboard/home_screen.dart';
@@ -18,10 +19,10 @@ import 'package:walletwatch/features/settings/how_to_use.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await Supabase.initialize(
-    url: 'https://fowfwznvppwsqmsvhnsf.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZvd2Z3em52cHB3c3Ftc3ZobnNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MDA4NTIsImV4cCI6MjA3NjM3Njg1Mn0.TUNX-MiwxCg2ns1c9wpy9G1oIlL8-YA0RWmB6SRJT2U',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   runApp(ShowCaseWidget(builder: (context) => const MyApp()));
 }
