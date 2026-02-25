@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on AuthException catch (e) {
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = "No Internet Connection";
       });
     } catch (e) {
       debugPrint("Login error: $e");
@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _initialSupabaseToLocalSync(User user) async {
-    // ✅ ALWAYS sync profile
+    // ALWAYS sync profile
     final profile = await supabase
         .from('users')
         .select()
@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint("User profile synced");
     }
 
-    // ✅ Only skip expenses/budgets if exist
+    // Only skip expenses/budgets if exist
     final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
     if (!isEmpty) {
