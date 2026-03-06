@@ -42,6 +42,8 @@ class _ReportsPageState extends State<ReportsPage> {
     "Other": Colors.teal,
   };
 
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   @override
   void initState() {
     super.initState();
@@ -161,9 +163,9 @@ class _ReportsPageState extends State<ReportsPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -176,14 +178,17 @@ class _ReportsPageState extends State<ReportsPage> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Reports",
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -193,10 +198,13 @@ class _ReportsPageState extends State<ReportsPage> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.pie_chart_outline, color: Colors.white),
+            child: Icon(
+              Icons.pie_chart_outline,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
@@ -209,9 +217,9 @@ class _ReportsPageState extends State<ReportsPage> {
   }) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon),
+      prefixIcon: Icon(icon, color: colorScheme.primary),
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -224,11 +232,14 @@ class _ReportsPageState extends State<ReportsPage> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.12),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -248,8 +259,9 @@ class _ReportsPageState extends State<ReportsPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
+        color: colorScheme.surfaceVariant.withOpacity(0.4),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -305,19 +317,19 @@ class _ReportsPageState extends State<ReportsPage> {
           sections: [
             PieChartSectionData(
               value: _cashExpense,
-              color: Colors.green,
+              color: colorScheme.secondary,
               title: "${((_cashExpense / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: Theme.of(context).colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
             PieChartSectionData(
               value: _onlineExpense,
-              color: Colors.blue,
+              color: colorScheme.primary,
               title: "${((_onlineExpense / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -348,14 +360,15 @@ class _ReportsPageState extends State<ReportsPage> {
           sectionsSpace: 2,
           sections: entries.map((e) {
             final percent = total == 0 ? 0 : (e.value / total * 100);
-            final color = _categoryColors[e.key] ?? Colors.grey;
+            final color =
+                _categoryColors[e.key] ?? colorScheme.onSurfaceVariant;
 
             return PieChartSectionData(
               value: e.value,
               color: color,
               title: percent >= 8 ? "${percent.toStringAsFixed(0)}%" : "",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: colorScheme.surface,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -369,15 +382,17 @@ class _ReportsPageState extends State<ReportsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.blue),
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: colorScheme.primary,
+                      ),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadReports,
@@ -425,16 +440,16 @@ class _ReportsPageState extends State<ReportsPage> {
                                   title: "Total Expense",
                                   value: "₹${_totalExpense.toStringAsFixed(2)}",
                                   icon: Icons.money,
-                                  iconColor: Colors.redAccent,
-                                  valueColor: Colors.redAccent,
+                                  iconColor: colorScheme.error,
+                                  valueColor: colorScheme.error,
                                 ),
                                 const SizedBox(height: 10),
                                 _summaryTile(
                                   title: "Total Budget",
                                   value: "₹${_totalBudget.toStringAsFixed(2)}",
                                   icon: Icons.account_balance_wallet_outlined,
-                                  iconColor: Colors.blue,
-                                  valueColor: Colors.blue,
+                                  iconColor: colorScheme.primary,
+                                  valueColor: colorScheme.primary,
                                 ),
                                 const SizedBox(height: 10),
                                 _summaryTile(
@@ -444,11 +459,11 @@ class _ReportsPageState extends State<ReportsPage> {
                                       ? Icons.check_circle_outline
                                       : Icons.warning_amber_outlined,
                                   iconColor: _remaining >= 0
-                                      ? Colors.green
-                                      : Colors.redAccent,
+                                      ? colorScheme.secondary
+                                      : colorScheme.error,
                                   valueColor: _remaining >= 0
-                                      ? Colors.green
-                                      : Colors.redAccent,
+                                      ? colorScheme.secondary
+                                      : colorScheme.error,
                                 ),
                               ],
                             ),
@@ -467,9 +482,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    _legendRow(Colors.green, "Cash"),
+                                    _legendRow(colorScheme.secondary, "Cash"),
                                     const SizedBox(width: 16),
-                                    _legendRow(Colors.blue, "Online"),
+                                    _legendRow(colorScheme.primary, "Online"),
                                   ],
                                 ),
                               ],
@@ -503,7 +518,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                               decoration: BoxDecoration(
                                                 color:
                                                     _categoryColors[e.key] ??
-                                                    Colors.grey,
+                                                    colorScheme
+                                                        .onSurfaceVariant,
                                                 shape: BoxShape.circle,
                                               ),
                                             ),
@@ -572,9 +588,9 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.blue,
+            color: colorScheme.primary,
           ),
         ),
       ],

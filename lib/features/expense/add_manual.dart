@@ -21,6 +21,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   String? _selectedDate;
   final _shopController = TextEditingController();
 
+  bool _isSaving = false;
+
   String _selectedCategory = 'Grocery';
   String _selectedPaymentMode = 'Cash';
 
@@ -43,6 +45,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     'Bills',
     'Other',
   ];
+
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   final List<String> _paymentModes = ['Cash', 'Online'];
 
@@ -317,6 +321,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   Future<void> _saveExpense() async {
+    if (_isSaving) return;
+
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
@@ -326,6 +332,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       );
       return;
     }
+    setState(() => _isSaving = true);
 
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -403,6 +410,12 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         });
       } catch (e) {
         debugPrint("Supabase insert failed, saved offline: $e");
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
       }
     }
 
@@ -437,7 +450,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       prefixIcon: Icon(icon),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.35),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -450,13 +463,16 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.35)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -471,7 +487,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
+        color: colorScheme.surfaceVariant.withOpacity(0.6),
+        border: Border.all(color: colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -486,10 +503,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               const Spacer(),
               if (itemInputs.length > 1)
                 IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.redAccent,
-                  ),
+                  icon: Icon(Icons.delete_outline, color: colorScheme.error),
                   onPressed: () => _removeItem(index),
                 ),
             ],
@@ -619,9 +633,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -634,14 +648,17 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Add Expense",
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -651,10 +668,13 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.add_card_outlined, color: Colors.white),
+            child: Icon(
+              Icons.add_card_outlined,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
@@ -664,7 +684,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -891,21 +911,21 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                     shop.isEmpty ? "Travel" : shop,
                                     style: TextStyle(
                                       color: isOnline
-                                          ? Colors.blue.shade800
-                                          : Colors.green.shade800,
+                                          ? colorScheme.primaryContainer
+                                          : colorScheme.secondaryContainer,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   backgroundColor: isOnline
-                                      ? Colors.blue.shade50
-                                      : Colors.green.shade50,
+                                      ? colorScheme.primary.withOpacity(0.35)
+                                      : colorScheme.secondary.withOpacity(0.35),
                                   avatar: Icon(
                                     isOnline
                                         ? Icons.account_balance
                                         : Icons.directions_bus,
                                     color: isOnline
-                                        ? Colors.blue
-                                        : Colors.green,
+                                        ? colorScheme.primary
+                                        : colorScheme.secondary,
                                     size: 18,
                                   ),
                                   onPressed: () => _applyTravelTemplate(t),
@@ -939,13 +959,11 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.blue.withOpacity(0.10),
-                                      Colors.blue.withOpacity(0.04),
-                                    ],
-                                  ),
+                                  color: colorScheme.primary.withOpacity(0.4),
                                   borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: colorScheme.primary.withOpacity(0.3),
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
@@ -959,10 +977,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                     const Spacer(),
                                     Text(
                                       "₹${total.toStringAsFixed(2)}",
-                                      style: const TextStyle(
-                                        fontSize: 20,
+                                      style: TextStyle(
+                                        fontSize: 22,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.blue,
+                                        color: colorScheme.primary,
                                       ),
                                     ),
                                   ],
@@ -985,9 +1003,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                       ),
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.blue,
-                                      side: const BorderSide(
-                                        color: Colors.blue,
+                                      foregroundColor: colorScheme.primary,
+                                      side: BorderSide(
+                                        color: colorScheme.primary,
                                         width: 1.3,
                                       ),
                                       shape: RoundedRectangleBorder(
@@ -1011,23 +1029,35 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                         child: SizedBox(
                           width: double.infinity,
                           height: 52,
+
                           child: ElevatedButton(
-                            onPressed: _saveExpense,
+                            onPressed: _isSaving ? null : _saveExpense,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
                               ),
-                              elevation: 0,
                             ),
-                            child: const Text(
-                              "Save Expense",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: _isSaving
+                                ? SizedBox(
+                                    height: 22,
+                                    width: 22,
+
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.surface,
+                                    ),
+                                  )
+                                : Text(
+                                    "Save Expense",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),

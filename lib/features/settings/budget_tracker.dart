@@ -35,6 +35,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   static const String _budgetTrackerTourDoneKey =
       "walletwatch_budget_tracker_tour_done";
 
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   @override
   void initState() {
     super.initState();
@@ -157,8 +159,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.surface,
             ),
             child: const Text("Save"),
           ),
@@ -183,7 +185,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.surface,
             ),
             child: const Text("Delete"),
           ),
@@ -211,9 +213,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -226,14 +228,17 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Budget Tracker",
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -243,10 +248,13 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.wallet_outlined, color: Colors.white),
+            child: Icon(
+              Icons.wallet_outlined,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
@@ -258,8 +266,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -280,7 +289,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.4),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -292,11 +301,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     final total = _cashTotal + _onlineTotal;
 
     if (total <= 0) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.all(10),
         child: Text(
           "No budget data for this month",
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: colorScheme.surfaceVariant),
         ),
       );
     }
@@ -310,19 +319,19 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           sections: [
             PieChartSectionData(
               value: _cashTotal,
-              color: Colors.green,
+              color: colorScheme.secondary,
               title: "${((_cashTotal / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: Theme.of(context).colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
             PieChartSectionData(
               value: _onlineTotal,
-              color: Colors.blue,
+              color: colorScheme.primary,
               title: "${((_onlineTotal / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: Theme.of(context).colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -336,9 +345,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _legendItem(Colors.green, "Cash"),
+        _legendItem(colorScheme.secondary, "Cash"),
         const SizedBox(width: 16),
-        _legendItem(Colors.blue, "Online"),
+        _legendItem(colorScheme.primary, "Online"),
       ],
     );
   }
@@ -373,10 +382,10 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         const SizedBox(height: 10),
         Text(
           "₹${total.toStringAsFixed(2)}",
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: Colors.blue,
+            color: colorScheme.primary,
           ),
         ),
         const SizedBox(height: 10),
@@ -386,7 +395,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.10),
+                  color: colorScheme.secondary.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
@@ -399,9 +408,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                     const SizedBox(height: 4),
                     Text(
                       "₹${_cashTotal.toStringAsFixed(2)}",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.green,
+                        color: colorScheme.secondary,
                       ),
                     ),
                   ],
@@ -413,7 +422,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.10),
+                  color: colorScheme.primary.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
@@ -426,9 +435,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                     const SizedBox(height: 4),
                     Text(
                       "₹${_onlineTotal.toStringAsFixed(2)}",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        color: colorScheme.primary,
                       ),
                     ),
                   ],
@@ -444,11 +453,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             children: [
               Expanded(
                 flex: (cashFrac * 1000).round().clamp(0, 1000),
-                child: Container(height: 7, color: Colors.green),
+                child: Container(height: 7, color: colorScheme.secondary),
               ),
               Expanded(
                 flex: (onlineFrac * 1000).round().clamp(0, 1000),
-                child: Container(height: 7, color: Colors.blue),
+                child: Container(height: 7, color: colorScheme.primary),
               ),
             ],
           ),
@@ -466,13 +475,13 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       background: _slideBg(
         Icons.edit,
         'Edit',
-        Colors.blue,
+        colorScheme.primary,
         Alignment.centerLeft,
       ),
       secondaryBackground: _slideBg(
         Icons.delete,
         'Delete',
-        Colors.redAccent,
+        colorScheme.error,
         Alignment.centerRight,
       ),
       confirmDismiss: (direction) async {
@@ -486,8 +495,9 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -500,11 +510,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           children: [
             CircleAvatar(
               backgroundColor: isOnline
-                  ? Colors.blue.withOpacity(0.12)
-                  : Colors.green.withOpacity(0.12),
+                  ? colorScheme.primary.withOpacity(0.12)
+                  : colorScheme.secondary.withOpacity(0.12),
               child: Icon(
                 isOnline ? Icons.account_balance_wallet_outlined : Icons.money,
-                color: isOnline ? Colors.blue : Colors.green,
+                color: isOnline ? colorScheme.primary : colorScheme.secondary,
               ),
             ),
             const SizedBox(width: 12),
@@ -526,7 +536,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                     "Date: ${item['date']}",
                     style: TextStyle(
                       fontSize: 12.5,
-                      color: Colors.grey.shade700,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -534,10 +544,10 @@ class _BudgetTrackerState extends State<BudgetTracker> {
             ),
             Text(
               "₹${amount.toStringAsFixed(2)}",
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
-                color: Colors.blue,
+                color: colorScheme.primary,
               ),
             ),
           ],
@@ -560,16 +570,38 @@ class _BudgetTrackerState extends State<BudgetTracker> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (alignment == Alignment.centerLeft) ...[
-            Icon(icon, color: Colors.white),
+            Icon(icon, color: colorScheme.surface),
             const SizedBox(width: 8),
-            Text(text, style: const TextStyle(color: Colors.white)),
+            Text(text, style: TextStyle(color: colorScheme.surface)),
           ] else ...[
-            Text(text, style: const TextStyle(color: Colors.white)),
+            Text(text, style: TextStyle(color: colorScheme.surface)),
             const SizedBox(width: 8),
-            Icon(icon, color: Colors.white),
+            Icon(icon, color: colorScheme.surface),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildModeDropdown() {
+    const modes = ['All', 'Cash', 'Online'];
+
+    final safeValue = modes.contains(_filterMode) ? _filterMode : 'All';
+
+    return DropdownButtonFormField<String>(
+      value: safeValue,
+      decoration: _pillDecoration(
+        hint: "Mode",
+        icon: Icons.account_balance_wallet,
+      ),
+      items: modes
+          .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _filterMode = value);
+        }
+      },
     );
   }
 
@@ -578,7 +610,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     final list = _filteredByMode;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -596,7 +628,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                           "Select month to view budgets for that month",
                       child: _sectionContainer(
                         child: DropdownButtonFormField<String>(
-                          value: _selectedMonth,
+                          value: _availableMonths.contains(_selectedMonth)
+                              ? _selectedMonth
+                              : (_availableMonths.isNotEmpty
+                                    ? _availableMonths.first
+                                    : null),
                           decoration: _pillDecoration(
                             hint: "Select Month",
                             icon: Icons.calendar_month,
@@ -666,28 +702,10 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                                 fontSize: 16,
                               ),
                             ),
+
                             const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              children: ['All', 'Cash', 'Online']
-                                  .map(
-                                    (m) => ChoiceChip(
-                                      label: Text(m),
-                                      selected: _filterMode == m,
-                                      selectedColor: Colors.blue.withOpacity(
-                                        0.18,
-                                      ),
-                                      labelStyle: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: _filterMode == m
-                                            ? Colors.blue
-                                            : Colors.black,
-                                      ),
-                                      onSelected: (_) =>
-                                          setState(() => _filterMode = m),
-                                    ),
-                                  )
-                                  .toList(),
+                            Row(
+                              children: [Expanded(child: _buildModeDropdown())],
                             ),
                           ],
                         ),
@@ -705,12 +723,14 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                                     height: 70,
                                     width: 70,
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.withOpacity(0.12),
+                                      color: colorScheme.primary.withOpacity(
+                                        0.12,
+                                      ),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.wallet_outlined,
-                                      color: Colors.blue,
+                                      color: colorScheme.primary,
                                       size: 38,
                                     ),
                                   ),
@@ -726,7 +746,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                                   Text(
                                     "Try selecting a different month or add a budget.",
                                     style: TextStyle(
-                                      color: Colors.grey.shade700,
+                                      color: colorScheme.surfaceVariant,
                                       fontSize: 13,
                                     ),
                                     textAlign: TextAlign.center,

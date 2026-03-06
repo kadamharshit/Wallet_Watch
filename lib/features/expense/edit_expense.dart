@@ -55,6 +55,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
     'other',
   ];
 
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   @override
   void initState() {
     super.initState();
@@ -308,7 +310,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
       prefixIcon: Icon(icon),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -321,11 +323,13 @@ class _EditExpensePageState extends State<EditExpensePage> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.06),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -339,13 +343,13 @@ class _EditExpensePageState extends State<EditExpensePage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.only(
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(26),
           bottomRight: Radius.circular(26),
         ),
@@ -354,14 +358,17 @@ class _EditExpensePageState extends State<EditExpensePage> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Edit Expense",
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -371,10 +378,13 @@ class _EditExpensePageState extends State<EditExpensePage> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.edit_note, color: Colors.white),
+            child: Icon(
+              Icons.edit_note,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
@@ -389,7 +399,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
+        color: colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -559,7 +569,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     final isTravel = _category == "Travel";
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -710,10 +720,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
                           const Spacer(),
                           Text(
                             "₹${total.toStringAsFixed(2)}",
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 20,
-                              color: Colors.blue,
+                              color: ColorScheme.of(context).primary,
                             ),
                           ),
                         ],
@@ -757,9 +767,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.blue,
-                                side: const BorderSide(
-                                  color: Colors.blue,
+                                foregroundColor: colorScheme.primary,
+                                side: BorderSide(
+                                  color: ColorScheme.of(context).primary,
                                   width: 1.3,
                                 ),
                                 shape: RoundedRectangleBorder(
@@ -780,20 +790,22 @@ class _EditExpensePageState extends State<EditExpensePage> {
                         child: ElevatedButton(
                           onPressed: _saving ? null : _saveChanges,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(30),
                             ),
                             elevation: 0,
                           ),
                           child: _saving
-                              ? const SizedBox(
+                              ? SizedBox(
                                   height: 20,
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                   ),
                                 )
                               : const Text(

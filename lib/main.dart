@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:walletwatch/providers/theme_provider.dart';
+import 'package:walletwatch/theme/app_theme.dart';
+
 import 'package:walletwatch/dashboard/home_screen.dart';
 import 'package:walletwatch/dashboard/splash_screen.dart';
 import 'package:walletwatch/features/auth/create_account_screen.dart';
@@ -15,16 +20,22 @@ import 'package:walletwatch/features/settings/budget_tracker.dart';
 import 'package:walletwatch/features/settings/edit_profile.dart';
 import 'package:walletwatch/features/settings/expense_tracker.dart';
 import 'package:walletwatch/features/settings/how_to_use.dart';
-//import 'package:walletwatch/features/settings/shopping_list_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-  runApp(ShowCaseWidget(builder: (context) => const MyApp()));
+
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: ShowCaseWidget(builder: (context) => const MyApp()),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -32,8 +43,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: context.watch<ThemeProvider>().themeMode,
+
       initialRoute: '/',
       routes: {
         '/': (_) => const SplashScreen(),
@@ -49,7 +67,6 @@ class MyApp extends StatelessWidget {
         '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
         "/export_report": (context) => const ExportReportPage(),
-        //"/shopping_list": (context) => const ShoppingListPage(),
       },
     );
   }

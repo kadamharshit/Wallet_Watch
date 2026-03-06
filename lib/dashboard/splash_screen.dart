@@ -9,6 +9,8 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final supabase = Supabase.instance.client;
 
   @override
@@ -18,9 +20,8 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkSession() async {
-    await Future.delayed(const Duration(seconds: 2));
-
     final session = supabase.auth.currentSession;
+    await Future.delayed(const Duration(milliseconds: 1200));
 
     if (!mounted) return;
 
@@ -33,13 +34,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.blue, Color(0xFF1E88E5)],
+            colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.7)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -49,13 +51,13 @@ class _SplashScreenState extends State<SplashScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
             margin: const EdgeInsets.symmetric(horizontal: 26),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95),
-              borderRadius: BorderRadius.circular(24),
+              color: colorScheme.surface.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
+                  color: Colors.black.withOpacity(isDark ? 0.4 : 0.15),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
@@ -65,34 +67,37 @@ class _SplashScreenState extends State<SplashScreen> {
                 // ✅ LOGO IMAGE FROM ASSET
                 Image.asset(
                   "assets/icon.png",
-                  height: 90,
-                  width: 90,
+                  height: 96,
+                  width: 96,
                   fit: BoxFit.contain,
                 ),
 
                 const SizedBox(height: 14),
 
-                const Text(
+                Text(
                   "WalletWatch",
-                  style: TextStyle(
-                    fontSize: 26,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: colorScheme.primary,
                   ),
                 ),
 
                 const SizedBox(height: 6),
 
-                const Text(
+                Text(
                   "Track. Save. Control.",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                 ),
 
-                const SizedBox(height: 22),
+                const SizedBox(height: 24),
+
+                CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: colorScheme.primary,
+                  backgroundColor: colorScheme.surfaceVariant,
+                ),
               ],
             ),
           ),

@@ -9,6 +9,8 @@ class CreateAccountScreen extends StatefulWidget {
 }
 
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _formKey = GlobalKey<FormState>();
 
   final nameController = TextEditingController();
@@ -95,7 +97,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       lastDate: DateTime.now(),
     );
     if (picked != null) {
-      dobController.text = "${picked.day}/${picked.month}/${picked.year}";
+      dobController.text =
+          "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
     }
   }
 
@@ -104,23 +107,39 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     required IconData icon,
     Widget? suffixIcon,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon),
+      isDense: true,
+      prefixIcon: Icon(icon, color: colorScheme.primary),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.error),
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -129,37 +148,33 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               Container(
                 height: 260,
                 width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primary,
+                      colorScheme.primary.withOpacity(0.8),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(32),
                     bottomRight: Radius.circular(32),
                   ),
                 ),
                 child: Stack(
                   children: [
-                    // Back button
-                    // Positioned(
-                    //   left: 10,
-                    //   top: 10,
-                    //   child: IconButton(
-                    //     icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    //     onPressed: () {
-                    //       Navigator.pushReplacementNamed(context, '/login');
-                    //     },
-                    //   ),
-                    // ),
                     Center(
                       child: Container(
                         height: 80,
                         width: 80,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.20),
+                          color: colorScheme.surface.withOpacity(0.20),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.person_add_alt_1,
-                          color: Colors.white,
+                          color: colorScheme.surface,
                           size: 44,
                         ),
                       ),
@@ -176,11 +191,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.black.withOpacity(0.4)
+                            : Colors.black.withOpacity(0.08),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -190,13 +207,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        const Text(
+                        Text(
                           "Create Account",
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
                         ),
                         const SizedBox(height: 18),
 
@@ -246,9 +263,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             icon: Icons.mail_outline,
                           ),
                           validator: (v) {
-                            if (v == null || v.isEmpty)
+                            if (v == null || v.isEmpty) {
                               return "Enter your email";
-                            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(v)) {
+                            }
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(v)) {
                               return "Enter a valid email";
                             }
                             return null;
@@ -316,8 +336,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(
-                                color: Colors.red,
+                              style: TextStyle(
+                                color: colorScheme.error,
                                 fontSize: 13,
                               ),
                             ),
@@ -332,27 +352,28 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _registerUser,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
                               ),
                               elevation: 0,
                             ),
                             child: _isLoading
-                                ? const SizedBox(
+                                ? SizedBox(
                                     height: 22,
                                     width: 22,
                                     child: CircularProgressIndicator(
-                                      color: Colors.white,
+                                      color: colorScheme.surface,
                                       strokeWidth: 2.4,
                                     ),
                                   )
-                                : const Text(
-                                    "Register",
+                                : Text(
+                                    "Create Account",
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: colorScheme.surface,
                                     ),
                                   ),
                           ),
@@ -365,10 +386,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                           onTap: () {
                             Navigator.pushReplacementNamed(context, '/login');
                           },
-                          child: const Text(
+                          child: Text(
                             "Already have an account? Login here",
                             style: TextStyle(
-                              color: Colors.blue,
+                              color: colorScheme.primary,
                               decoration: TextDecoration.underline,
                               fontWeight: FontWeight.w600,
                             ),
@@ -386,5 +407,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    mobileController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    dobController.dispose();
+    super.dispose();
   }
 }

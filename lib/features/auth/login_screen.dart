@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
+import 'package:walletwatch/providers/theme_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,6 +13,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -23,13 +27,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // if (!_agreeTerms) {
-    //   setState(() {
-    //     _errorMessage = "Please accept terms and conditions";
-    //   });
-    //   return;
-    // }
 
     setState(() {
       _isLoading = true;
@@ -46,13 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (authRes.user != null) {
-        if (!mounted) return;
-
         const storage = FlutterSecureStorage();
         await storage.write(key: 'useremail', value: email);
         await storage.write(key: 'username', value: email.split('@').first);
 
         await _initialSupabaseToLocalSync(authRes.user!);
+
+        if (!mounted) return;
 
         ScaffoldMessenger.of(
           context,
@@ -65,17 +62,69 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     } on AuthException catch (e) {
+      String message = e.message.toLowerCase();
+
+      if (message.contains("invalid login credentials")) {
+        _errorMessage = "Invalid email or password";
+      } else if (message.contains("failed host lookup") ||
+          message.contains("network") ||
+          message.contains("socket") ||
+          message.contains("connection")) {
+        _errorMessage = "No internet connection";
+      } else {
+        _errorMessage = "Login failed. Please try again.";
+      }
+
+      setState(() {});
+    } on PostgrestException catch (_) {
       setState(() {
-        _errorMessage = "No Internet Connection";
+        _errorMessage = "No internet connection";
       });
     } catch (e) {
-      debugPrint("Login error: $e");
       setState(() {
-        _errorMessage = "Something went wrong. Try again.";
+        _errorMessage = "No internet connection";
       });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  InputDecoration _pillDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, color: colorScheme.primary),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide.none,
+      ),
+
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.outlineVariant),
+      ),
+
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+      ),
+
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(30),
+        borderSide: BorderSide(color: colorScheme.error),
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+    );
   }
 
   Future<void> _initialSupabaseToLocalSync(User user) async {
@@ -153,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: colorScheme.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -162,26 +211,58 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 height: 260,
                 width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primary,
+                      colorScheme.primary.withOpacity(0.8),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(32),
                     bottomRight: Radius.circular(32),
                   ),
                 ),
                 child: Center(
-                  child: Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.20),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_rounded,
-                      color: Colors.white,
-                      size: 44,
-                    ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: IconButton(
+                          icon: Icon(
+                            Theme.of(context).brightness == Brightness.dark
+                                ? Icons.light_mode
+                                : Icons.dark_mode,
+                            color: colorScheme.surface,
+                          ),
+
+                          onPressed: () {
+                            final isDark =
+                                Theme.of(context).brightness == Brightness.dark;
+                            context.read<ThemeProvider>().toggleTheme(!isDark);
+                          },
+                        ),
+                      ),
+
+                      Center(
+                        child: Container(
+                          height: 80,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface.withOpacity(0.20),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Icon(
+                            Icons.account_balance_wallet_rounded,
+                            color: colorScheme.surface,
+                            size: 44,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -194,11 +275,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.black.withOpacity(0.4)
+                            : Colors.black.withOpacity(0.08),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -208,12 +291,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        const Text(
+                        Text(
                           "WalletWatch",
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        Text(
+                          "Smart Expense Tracking",
                           style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                            fontSize: 13,
+                            color: colorScheme.primary.withOpacity(0.5),
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -222,22 +314,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            hintText: "Email",
-                            prefixIcon: const Icon(Icons.mail_outline),
-                            filled: true,
-                            fillColor: const Color(0xFFF6F6F6),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide.none,
-                            ),
+                          textInputAction: TextInputAction.next,
+                          decoration: _pillDecoration(
+                            hint: "Email",
+                            icon: Icons.mail_lock_outlined,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return "Enter your email";
                             }
                             if (!RegExp(
-                              r'^[^@]+@[^@]+\.[^@]+',
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                             ).hasMatch(value)) {
                               return "Enter a valid email";
                             }
@@ -250,26 +337,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: !_isPasswordVisible,
-                          decoration: InputDecoration(
-                            hintText: "Password",
-                            prefixIcon: const Icon(Icons.lock_outline),
+                          textInputAction: TextInputAction.done,
+                          decoration: _pillDecoration(
+                            hint: "Password",
+                            icon: Icons.lock_outline,
                             suffixIcon: IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
-                              },
                               icon: Icon(
                                 _isPasswordVisible
                                     ? Icons.visibility
                                     : Icons.visibility_off,
                               ),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF6F6F6),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide.none,
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
                             ),
                           ),
                           validator: (value) => value == null || value.isEmpty
@@ -284,8 +366,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(
-                                color: Colors.red,
+                              style: TextStyle(
+                                color: colorScheme.error,
                                 fontSize: 13,
                               ),
                             ),
@@ -300,27 +382,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _login,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
                               ),
                               elevation: 0,
                             ),
                             child: _isLoading
-                                ? const SizedBox(
+                                ? SizedBox(
                                     height: 22,
                                     width: 22,
                                     child: CircularProgressIndicator(
-                                      color: Colors.white,
+                                      color: colorScheme.surface,
                                       strokeWidth: 2.4,
                                     ),
                                   )
-                                : const Text(
+                                : Text(
                                     "Login",
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: colorScheme.surface,
                                     ),
                                   ),
                           ),
@@ -333,45 +416,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: () {
                             Navigator.pushNamed(context, '/register');
                           },
-                          child: const Text(
+                          child: Text(
                             "Don't have an account? Register here",
                             style: TextStyle(
-                              color: Colors.blue,
+                              color: colorScheme.primary,
                               decoration: TextDecoration.underline,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: 18),
-
-                        //  SOCIAL LOGIN UI (ONLY UI)
-                        // Row(
-                        //   children: const [
-                        //     Expanded(child: Divider()),
-                        //     Padding(
-                        //       padding: EdgeInsets.symmetric(horizontal: 10),
-                        //       child: Text("or"),
-                        //     ),
-                        //     Expanded(child: Divider()),
-                        //   ],
-                        // ),
-                        const SizedBox(height: 14),
-
-                        // Row(
-                        //   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        //   children: [
-                        //     _socialBox(Icons.g_mobiledata, Colors.red),
-                        //     _socialBox(Icons.apple, Colors.black),
-                        //     _socialBox(Icons.facebook, Colors.blue),
-                        //   ],
-                        // ),
-                        const SizedBox(height: 14),
-
-                        // const Text(
-                        //   "Log in with your social media account",
-                        //   style: TextStyle(fontSize: 12, color: Colors.grey),
-                        // ),
                       ],
                     ),
                   ),
@@ -384,15 +437,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // static Widget _socialBox(IconData icon, Color color) {
-  //   return Container(
-  //     height: 48,
-  //     width: 60,
-  //     decoration: BoxDecoration(
-  //       color: color.withOpacity(0.12),
-  //       borderRadius: BorderRadius.circular(14),
-  //     ),
-  //     child: Icon(icon, color: color, size: 28),
-  //   );
-  // }
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 }

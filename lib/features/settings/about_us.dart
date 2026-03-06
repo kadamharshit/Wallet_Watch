@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 
-class AboutUs extends StatelessWidget {
+class AboutUs extends StatefulWidget {
   const AboutUs({super.key});
+
+  @override
+  State<AboutUs> createState() => _AboutUsState();
+}
+
+class _AboutUsState extends State<AboutUs> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -22,14 +29,14 @@ class AboutUs extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.arrow_back, color: colorScheme.surface),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "About WalletWatch",
               style: TextStyle(
-                color: Colors.white,
+                color: colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -39,26 +46,30 @@ class AboutUs extends StatelessWidget {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.info_outline, color: Colors.white),
+            child: Icon(
+              Icons.info_outline,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _sectionContainer({required Widget child}) {
+  Widget _sectionContainer(BuildContext context, {required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: colorScheme.surfaceVariant.withOpacity(0.5),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -78,14 +89,15 @@ class AboutUs extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
+        color: colorScheme.surfaceVariant.withOpacity(0.4),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: Colors.blue.withOpacity(0.12),
-            child: Icon(icon, color: Colors.blue),
+            backgroundColor: colorScheme.primary.withOpacity(0.12),
+            child: Icon(icon, color: colorScheme.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -102,7 +114,10 @@ class AboutUs extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -113,28 +128,10 @@ class AboutUs extends StatelessWidget {
     );
   }
 
-  Widget _comingSoonChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: const Text(
-        "Coming Soon",
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.orange,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -145,13 +142,14 @@ class AboutUs extends StatelessWidget {
                 child: Column(
                   children: [
                     _sectionContainer(
+                      context,
                       child: Column(
                         children: [
                           Container(
                             height: 86,
                             width: 86,
                             decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.12),
+                              color: colorScheme.primary.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(22),
                             ),
                             child: Image.asset(
@@ -160,12 +158,12 @@ class AboutUs extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
+                          Text(
                             "WalletWatch",
                             style: TextStyle(
                               fontSize: 26,
                               fontWeight: FontWeight.bold,
-                              color: Colors.blue,
+                              color: colorScheme.primary,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -173,7 +171,7 @@ class AboutUs extends StatelessWidget {
                             "Track • Budget • Control",
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey.shade700,
+                              color: colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -182,6 +180,7 @@ class AboutUs extends StatelessWidget {
                     ),
 
                     _sectionContainer(
+                      context,
                       child: Text(
                         "WalletWatch helps you manage your expenses and maintain a clear record of your spending. "
                         "It is designed to keep your finances simple, transparent, and under control.",
@@ -191,6 +190,7 @@ class AboutUs extends StatelessWidget {
                     ),
 
                     _sectionContainer(
+                      context,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -207,12 +207,6 @@ class AboutUs extends StatelessWidget {
                             title: "Manual Expense Entry",
                             subtitle: "Add and categorize expenses easily.",
                           ),
-                          // _featureTile(
-                          //   icon: Icons.receipt_long,
-                          //   title: "Receipt Scan",
-                          //   subtitle: "Scan receipts to auto-fill data.",
-                          //   trailing: _comingSoonChip(),
-                          // ),
                           _featureTile(
                             icon: Icons.pie_chart_outline,
                             title: "Budget Tracking",
@@ -234,6 +228,7 @@ class AboutUs extends StatelessWidget {
                     ),
 
                     _sectionContainer(
+                      context,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -248,18 +243,19 @@ class AboutUs extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF6F6F6),
+                              color: colorScheme.surfaceVariant.withOpacity(
+                                0.5,
+                              ),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
                               children: [
                                 CircleAvatar(
-                                  backgroundColor: Colors.blue.withOpacity(
-                                    0.12,
-                                  ),
-                                  child: const Icon(
+                                  backgroundColor: colorScheme.primary
+                                      .withOpacity(0.12),
+                                  child: Icon(
                                     Icons.email,
-                                    color: Colors.blue,
+                                    color: colorScheme.primary,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -277,7 +273,7 @@ class AboutUs extends StatelessWidget {
                                       "expensetracker@gmail.com",
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: Colors.grey.shade700,
+                                        color: colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ],
@@ -295,7 +291,7 @@ class AboutUs extends StatelessWidget {
                       "Made with ❤️ to help you manage money better",
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: colorScheme.onSurfaceVariant.withOpacity(0.8),
                       ),
                     ),
                   ],

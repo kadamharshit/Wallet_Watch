@@ -26,7 +26,16 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   bool _isOnline = false;
 
   String _filterMode = 'All';
-
+  String _selectedCatgeory = 'All';
+  final List<String> _categories = [
+    'All',
+    'Grocery',
+    'Travel',
+    'Food',
+    'Medical',
+    'Bills',
+    'Other',
+  ];
   String _selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
 
@@ -42,6 +51,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   static const String _expenseTrackerTourDoneKey =
       "walletwatch_expense_tracker_tour_done";
 
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
   @override
   void initState() {
     super.initState();
@@ -189,15 +199,18 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: [
               Shimmer.fromColors(
-                baseColor: Colors.grey.shade300,
-                highlightColor: Colors.grey.shade100,
-                child: CircleAvatar(radius: 20, backgroundColor: Colors.white),
+                baseColor: colorScheme.onSurfaceVariant,
+                highlightColor: colorScheme.surface,
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -205,22 +218,22 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Shimmer.fromColors(
-                      baseColor: Colors.grey.shade300,
-                      highlightColor: Colors.grey.shade100,
+                      baseColor: colorScheme.onSurfaceVariant,
+                      highlightColor: colorScheme.surface,
                       child: Container(
                         height: 12,
                         width: 140,
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.surface,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Shimmer.fromColors(
-                      baseColor: Colors.grey.shade300,
-                      highlightColor: Colors.grey.shade100,
+                      baseColor: colorScheme.onSurfaceVariant,
+                      highlightColor: colorScheme.surface,
                       child: Container(
                         height: 10,
                         width: 100,
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.surface,
                       ),
                     ),
                   ],
@@ -241,9 +254,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: Colors.grey,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -305,7 +318,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -326,7 +339,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                   width: 44,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
+                    color: colorScheme.onSurfaceVariant,
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -519,11 +532,17 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       final date = (e['date'] ?? '').toString();
       final matchesMonth = date.startsWith(_selectedMonth);
 
-      if (_filterMode == 'All') return matchesMonth;
-
-      return matchesMonth &&
+      final matchesMode =
+          _filterMode == 'All' ||
           (e['mode'] ?? '').toString().toLowerCase() ==
               _filterMode.toLowerCase();
+
+      final matchesCategory =
+          _selectedCatgeory == 'All' ||
+          (e['category'] ?? '').toString().toLowerCase() ==
+              _selectedCatgeory.toLowerCase();
+
+      return matchesMonth && matchesMode && matchesCategory;
     }).toList();
   }
 
@@ -543,11 +562,11 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     final total = _grandTotal;
 
     if (total <= 0) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
+      return Padding(
+        padding: const EdgeInsets.all(12),
         child: Text(
           "No expenses for this month",
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -561,19 +580,19 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           sections: [
             PieChartSectionData(
               value: _totalCash,
-              color: Colors.green,
+              color: colorScheme.secondary,
               title: "${((_totalCash / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: Theme.of(context).colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
             PieChartSectionData(
               value: _totalOnline,
-              color: Colors.blue,
+              color: colorScheme.primary,
               title: "${((_totalOnline / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
-                color: Colors.white,
+              titleStyle: TextStyle(
+                color: Theme.of(context).colorScheme.surface,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -606,7 +625,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     final amount = (exp['total'] as num).toDouble();
     final isOnline = (exp['mode'] ?? '').toString().toLowerCase() == 'online';
 
-    final badgeColor = isOnline ? Colors.blue : Colors.green;
+    final badgeColor = isOnline ? colorScheme.primary : colorScheme.secondary;
     final badgeText = isOnline ? "Online" : "Cash";
 
     return InkWell(
@@ -616,11 +635,13 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.4)
+                  : Colors.black.withOpacity(0.06),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -654,7 +675,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                     "${_formatDate(exp['date'])} • ${exp['category']}",
                     style: TextStyle(
                       fontSize: 12.5,
-                      color: Colors.grey.shade700,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 7),
@@ -682,10 +703,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
             const SizedBox(width: 10),
             Text(
               "₹${amount.toStringAsFixed(2)}",
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15.5,
-                color: Colors.blue,
+                color: colorScheme.primary,
               ),
             ),
           ],
@@ -694,11 +715,52 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
+  Widget _buildModeDropdown() {
+    const modes = ['All', 'Cash', 'Online'];
+
+    final safeValue = modes.contains(_filterMode) ? _filterMode : 'All';
+
+    return DropdownButtonFormField<String>(
+      value: safeValue,
+      decoration: _pillDecoration(
+        hint: "Mode",
+        icon: Icons.account_balance_wallet,
+      ),
+      items: modes
+          .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _filterMode = value);
+        }
+      },
+    );
+  }
+
+  Widget _buildCategoryDropdown() {
+    final safeValue = _categories.contains(_selectedCatgeory)
+        ? _selectedCatgeory
+        : 'All';
+
+    return DropdownButtonFormField<String>(
+      value: safeValue,
+      decoration: _pillDecoration(hint: "Category", icon: Icons.category),
+      items: _categories
+          .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _selectedCatgeory = value);
+        }
+      },
+    );
+  }
+
   Widget _tableHeader(List<String> headers) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: colorScheme.surfaceVariant.withOpacity(0.6),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -735,8 +797,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
+              backgroundColor: colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.surface,
             ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
@@ -752,9 +814,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _legendItem(Colors.green, "Cash"),
+        _legendItem(colorScheme.secondary, "Cash"),
         const SizedBox(width: 16),
-        _legendItem(Colors.blue, "Online"),
+        _legendItem(colorScheme.primary, "Online"),
       ],
     );
   }
@@ -777,9 +839,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -792,14 +854,14 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.arrow_back, color: colorScheme.surface),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Expense Tracker",
               style: TextStyle(
-                color: Colors.white,
+                color: colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -809,10 +871,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.receipt_long, color: Colors.white),
+            child: Icon(Icons.receipt_long, color: colorScheme.surface),
           ),
         ],
       ),
@@ -824,11 +886,13 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.06),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -846,7 +910,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -857,7 +921,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: colorScheme.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -943,10 +1007,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                             const SizedBox(height: 10),
                             Text(
                               "₹${_grandTotal.toStringAsFixed(2)}",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue,
+                                color: colorScheme.primary,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -956,7 +1020,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                   child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.10),
+                                      color: colorScheme.secondary.withOpacity(
+                                        0.10,
+                                      ),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: Column(
@@ -972,9 +1038,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                         const SizedBox(height: 4),
                                         Text(
                                           "₹${_totalCash.toStringAsFixed(2)}",
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.green,
+                                            color: colorScheme.secondary,
                                           ),
                                         ),
                                       ],
@@ -986,7 +1052,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                   child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.withOpacity(0.10),
+                                      color: colorScheme.primary.withOpacity(
+                                        0.10,
+                                      ),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: Column(
@@ -1002,9 +1070,9 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                         const SizedBox(height: 4),
                                         Text(
                                           "₹${_totalOnline.toStringAsFixed(2)}",
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.blue,
+                                            color: colorScheme.primary,
                                           ),
                                         ),
                                       ],
@@ -1018,27 +1086,12 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                               key: _filterKey,
                               description:
                                   "Filter expenses by payment mode: All / Cash / Online",
-                              child: Wrap(
-                                spacing: 8,
-                                children: ['All', 'Cash', 'Online']
-                                    .map(
-                                      (m) => ChoiceChip(
-                                        label: Text(m),
-                                        selected: _filterMode == m,
-                                        selectedColor: Colors.blue.withOpacity(
-                                          0.18,
-                                        ),
-                                        labelStyle: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: _filterMode == m
-                                              ? Colors.blue
-                                              : Colors.black,
-                                        ),
-                                        onSelected: (_) =>
-                                            setState(() => _filterMode = m),
-                                      ),
-                                    )
-                                    .toList(),
+                              child: Row(
+                                children: [
+                                  Expanded(child: _buildModeDropdown()),
+                                  const SizedBox(width: 2),
+                                  Expanded(child: _buildCategoryDropdown()),
+                                ],
                               ),
                             ),
                           ],
@@ -1059,12 +1112,14 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                     height: 70,
                                     width: 70,
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.withOpacity(0.12),
+                                      color: colorScheme.primary.withOpacity(
+                                        0.12,
+                                      ),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.receipt_long,
-                                      color: Colors.blue,
+                                      color: colorScheme.primary,
                                       size: 38,
                                     ),
                                   ),
@@ -1080,7 +1135,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                   Text(
                                     "Try selecting a different month or add a new expense.",
                                     style: TextStyle(
-                                      color: Colors.grey.shade700,
+                                      color: colorScheme.onSurfaceVariant,
                                       fontSize: 13,
                                     ),
                                     textAlign: TextAlign.center,
@@ -1125,7 +1180,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.blue,
+                                            color: colorScheme.primary,
                                             borderRadius: BorderRadius.circular(
                                               18,
                                             ),
@@ -1134,17 +1189,21 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                           padding: const EdgeInsets.only(
                                             left: 18,
                                           ),
-                                          child: const Row(
+                                          child: Row(
                                             children: [
                                               Icon(
                                                 Icons.edit,
-                                                color: Colors.white,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.surface,
                                               ),
-                                              SizedBox(width: 8),
+                                              const SizedBox(width: 8),
                                               Text(
                                                 'Edit',
                                                 style: TextStyle(
-                                                  color: Colors.white,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.surface,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -1158,7 +1217,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.redAccent,
+                                            color: colorScheme.error,
                                             borderRadius: BorderRadius.circular(
                                               18,
                                             ),
@@ -1167,21 +1226,25 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                           padding: const EdgeInsets.only(
                                             right: 18,
                                           ),
-                                          child: const Row(
+                                          child: Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.end,
                                             children: [
                                               Text(
                                                 'Delete',
                                                 style: TextStyle(
-                                                  color: Colors.white,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.surface,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
-                                              SizedBox(width: 8),
+                                              const SizedBox(width: 8),
                                               Icon(
                                                 Icons.delete,
-                                                color: Colors.white,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.surface,
                                               ),
                                             ],
                                           ),
