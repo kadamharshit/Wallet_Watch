@@ -1,4 +1,4 @@
-import 'dart:convert';
+//import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +9,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:walletwatch/services/expense_database.dart';
 
+import 'package:provider/provider.dart';
+import 'package:walletwatch/providers/theme_provider.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -17,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
   double _cashExpense = 0.0;
   double _onlineExpense = 0.0;
 
@@ -25,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _username = '';
   String _useremail = '';
+
+  bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _homeTourKey = "WalletWatch_home_tour_done";
@@ -51,16 +57,13 @@ class _HomeScreenState extends State<HomeScreen> {
       : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
 
   Color _amountColor(double value) =>
-      value >= 0 ? Colors.green : Colors.redAccent;
+      value >= 0 ? colorScheme.secondary : colorScheme.error;
 
   String _formatPercent(double used, double total) {
     if (total <= 0) return "No budget set";
     final percent = (used / total * 100).clamp(0, 999).toStringAsFixed(0);
     return "$percent% of budget used";
   }
-
-  Map<String, dynamic>? _activeShoppingList;
-  List<Map<String, dynamic>> _shoppingItems = [];
 
   // ---------------- Lifecycle ----------------
   @override
@@ -252,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(backgroundColor: colorScheme.error),
             child: const Text("Yes"),
           ),
         ],
@@ -260,11 +263,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      await DatabaseHelper.instance.clearAllTables();
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
 
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
+        // Clear local cache AFTER signout
+        await DatabaseHelper.instance.clearAllTables();
+
+        if (!mounted) return;
+
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Logout failed. Check connection.")),
+        );
       }
     }
   }
@@ -274,10 +285,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final total = _cashExpense + _onlineExpense;
 
     if (total <= 0) {
-      return const Center(
+      return Center(
         child: Text(
           "No Expense data for this month",
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -291,10 +302,10 @@ class _HomeScreenState extends State<HomeScreen> {
           sections: [
             PieChartSectionData(
               value: _cashExpense,
-              color: Colors.green,
+              color: colorScheme.secondary,
               radius: 52,
               title: "${((_cashExpense / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
+              titleStyle: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
                 color: Colors.white,
@@ -302,10 +313,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             PieChartSectionData(
               value: _onlineExpense,
-              color: Colors.blue,
+              color: colorScheme.primary,
               radius: 52,
               title: "${((_onlineExpense / total) * 100).toStringAsFixed(0)}%",
-              titleStyle: const TextStyle(
+              titleStyle: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
                 color: Colors.white,
@@ -317,13 +328,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String get _budgetStatus {
+    if (_totalRemaining >= 0) {
+      return "Within Budget";
+    } else {
+      return "Over Budget";
+    }
+  }
+
+  Color get _budgetStatusColor {
+    return _totalRemaining >= 0 ? Colors.green : colorScheme.error;
+  }
+
   Widget _buildPieLegend() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _legendItem(Colors.green, "Cash"),
+        _legendItem(colorScheme.secondary, "Cash"),
         const SizedBox(width: 16),
-        _legendItem(Colors.blue, "Online"),
+        _legendItem(colorScheme.primary, "Online"),
       ],
     );
   }
@@ -342,59 +365,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  //----------------LOAD SHOPPING LIST-----------------
-  // Future<void> _loadShoppingList() async {
-  //   final data = await DatabaseHelper.instance.getActiveShoppingList();
-
-  //   if (data == null) {
-  //     setState(() {
-  //       _activeShoppingList = null;
-  //       _shoppingItems = [];
-  //     });
-  //     return;
-  //   }
-
-  //   final itemsJson = data['items'] as String?;
-  //   final items = itemsJson == null || itemsJson.isEmpty
-  //       ? <Map<String, dynamic>>[]
-  //       : List<Map<String, dynamic>>.from(jsonDecode(itemsJson));
-
-  //   if (items.isEmpty) {
-  //     //  Auto-clean orphan shopping list
-  //     await DatabaseHelper.instance.clearShoppingList();
-  //     setState(() {
-  //       _activeShoppingList = null;
-  //       _shoppingItems = [];
-  //     });
-  //     return;
-  //   }
-
-  //   setState(() {
-  //     _activeShoppingList = data;
-  //     _shoppingItems = items;
-  //   });
-  // }
-
-  //---------------TOGGLE SHOPPING ITEMS----------------------
-  Future<void> _toggleShoppingItem(int index, bool value) async {
-    _shoppingItems[index]['checked'] = value;
-
-    await DatabaseHelper.instance.insertShoppingList({
-      'id': _activeShoppingList!['id'],
-      'uuid': _activeShoppingList!['uuid'],
-      'shop': _activeShoppingList!['shop'],
-      'items': jsonEncode(_shoppingItems),
-      'created_at': _activeShoppingList!['created_at'],
-    });
-
-    setState(() {});
-  }
-
-  // ---------------- UI ----------------
+  //----------------------------------UI---------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       drawer: _buildDrawer(),
       body: RefreshIndicator(
         onRefresh: _refreshAll,
@@ -404,10 +379,25 @@ class _HomeScreenState extends State<HomeScreen> {
             //  MODERN APPBAR HEADER
             SliverAppBar(
               pinned: true,
-              expandedHeight: 10,
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              title: const Text("WalletWatch"),
+              expandedHeight: 70,
+              flexibleSpace: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colorScheme.primary,
+                      colorScheme.primary.withOpacity(0.8),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+              title: const Text(
+                "WalletWatch",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              foregroundColor: colorScheme.surface,
+              elevation: 0,
             ),
 
             SliverToBoxAdapter(
@@ -443,14 +433,10 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue.withOpacity(0.06)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: colorScheme.surface,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -462,10 +448,11 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 46,
               width: 46,
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.12),
+                color: colorScheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colorScheme.outlineVariant),
               ),
-              child: const Icon(Icons.savings, color: Colors.blue),
+              child: Icon(Icons.savings, color: colorScheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -483,9 +470,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     "₹ ${_totalRemaining.toStringAsFixed(2)}",
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: _amountColor(_totalRemaining),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _budgetStatusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _budgetStatus,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _budgetStatusColor,
+                      ),
                     ),
                   ),
                 ],
@@ -497,85 +504,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  //------------------------Build Shopping Cart--------------------
-  // Widget _buildShoppingListCard() {
-  //   final shop = _activeShoppingList!['shop'] ?? "Shopping List";
-
-  //   return Container(
-  //     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //     padding: const EdgeInsets.all(16),
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       borderRadius: BorderRadius.circular(18),
-  //       boxShadow: [
-  //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.06),
-  //           blurRadius: 14,
-  //           offset: const Offset(0, 6),
-  //         ),
-  //       ],
-  //     ),
-  //     child: Column(
-  //       crossAxisAlignment: CrossAxisAlignment.start,
-  //       children: [
-  //         Row(
-  //           children: [
-  //             const Icon(Icons.shopping_cart, color: Colors.blue),
-  //             const SizedBox(width: 8),
-  //             Expanded(
-  //               child: Text(
-  //                 shop,
-  //                 style: const TextStyle(
-  //                   fontWeight: FontWeight.w700,
-  //                   fontSize: 16,
-  //                 ),
-  //               ),
-  //             ),
-  //             // TextButton(
-  //             //   onPressed: () {
-  //             //     Navigator.pushNamed(
-  //             //       context,
-  //             //       '/shopping_list',
-  //             //     ).then((_) => _loadShoppingList());
-  //             //   },
-  //             //   child: const Text("Open"),
-  //             // ),
-  //           ],
-  //         ),
-  //         const SizedBox(height: 10),
-
-  //         ..._shoppingItems.take(5).map((item) {
-  //           final index = _shoppingItems.indexOf(item);
-  //           return CheckboxListTile(
-  //             dense: true,
-  //             contentPadding: EdgeInsets.zero,
-  //             value: item['checked'] == true,
-  //             onChanged: (v) => _toggleShoppingItem(index, v ?? false),
-  //             title: Text(
-  //               item['name'],
-  //               style: TextStyle(
-  //                 decoration: item['checked'] == true
-  //                     ? TextDecoration.lineThrough
-  //                     : null,
-  //               ),
-  //             ),
-  //             subtitle: Text("${item['qty']} ${item['unit']}"),
-  //           );
-  //         }),
-
-  //         if (_shoppingItems.length > 5)
-  //           const Padding(
-  //             padding: EdgeInsets.only(top: 6),
-  //             child: Text(
-  //               "More items in list…",
-  //               style: TextStyle(color: Colors.grey),
-  //             ),
-  //           ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
   Widget _buildPieCard() {
     return Showcase(
       key: _pieKey,
@@ -584,11 +512,14 @@ class _HomeScreenState extends State<HomeScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: isDark
+                  ? Colors.black.withOpacity(0.4)
+                  : Colors.black.withOpacity(0.08),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -597,9 +528,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Expense Breakdown",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             _buildExpensePieChart(),
@@ -624,7 +557,7 @@ class _HomeScreenState extends State<HomeScreen> {
               amount: _cashRemaining,
               progress: _cashProgress,
               percentText: _formatPercent(_cashExpense, _cashBudget),
-              color: Colors.green,
+              color: colorScheme.secondary,
               margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
             ),
           ),
@@ -639,7 +572,7 @@ class _HomeScreenState extends State<HomeScreen> {
               amount: _onlineRemaining,
               progress: _onlineProgress,
               percentText: _formatPercent(_onlineExpense, _onlineBudget),
-              color: Colors.blue,
+              color: colorScheme.primary,
               margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
             ),
           ),
@@ -668,8 +601,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
@@ -695,10 +628,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.blue,
+                    backgroundColor: colorScheme.surface,
+                    foregroundColor: colorScheme.primary,
                     elevation: 0,
-                    side: const BorderSide(color: Colors.blue, width: 1.4),
+                    side: BorderSide(color: colorScheme.primary, width: 1.4),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
@@ -723,9 +656,12 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.blue, Color(0xFF1E88E5)],
+                  colors: [
+                    colorScheme.primary,
+                    colorScheme.primary.withOpacity(0.8),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -734,13 +670,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: Colors.white,
+                    backgroundColor: colorScheme.surface,
                     child: Text(
                       getInitials(_username),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        color: colorScheme.primary,
                       ),
                     ),
                   ),
@@ -751,16 +687,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Text(
                           _username.isEmpty ? "User" : _username,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: colorScheme.surface,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           _useremail,
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(color: colorScheme.surface),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -778,6 +714,18 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
             _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
+            const Divider(),
+
+            ListTile(
+              leading: const Icon(Icons.dark_mode),
+              title: const Text("Dark Mode"),
+              trailing: Switch(
+                value: Theme.of(context).brightness == Brightness.dark,
+                onChanged: (value) {
+                  context.read<ThemeProvider>().toggleTheme(value);
+                },
+              ),
+            ),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
               title: const Text("Sign Out"),
@@ -814,11 +762,14 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: margin,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: isDark
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.08),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -857,19 +808,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              color: color,
-              minHeight: 8,
-              backgroundColor: Colors.grey.shade300,
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colorScheme.outlineVariant),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: progress,
+                color: color,
+                minHeight: 8,
+                backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
+              ),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             percentText,
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
           ),
         ],
       ),

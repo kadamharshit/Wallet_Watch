@@ -9,7 +9,7 @@ import 'package:walletwatch/services/expense_database.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/services.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 
 class ExportReportPage extends StatefulWidget {
   const ExportReportPage({super.key});
@@ -32,6 +32,8 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
   double _totalExpense = 0;
   double _totalBudget = 0;
+
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   @override
   void initState() {
@@ -289,7 +291,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
@@ -302,8 +304,9 @@ class _ExportReportPageState extends State<ExportReportPage> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -320,9 +323,9 @@ class _ExportReportPageState extends State<ExportReportPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue, Color(0xFF1E88E5)],
+          colors: [colorScheme.primary, colorScheme.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -335,14 +338,17 @@ class _ExportReportPageState extends State<ExportReportPage> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(
+              Icons.arrow_back,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               "Export Report",
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -352,10 +358,13 @@ class _ExportReportPageState extends State<ExportReportPage> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.20),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.download_for_offline, color: Colors.white),
+            child: Icon(
+              Icons.download_for_offline,
+              color: Theme.of(context).colorScheme.surface,
+            ),
           ),
         ],
       ),
@@ -367,15 +376,17 @@ class _ExportReportPageState extends State<ExportReportPage> {
     final canExport = _isMonthCompleted(_selectedMonth);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.blue),
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: colorScheme.primary,
+                      ),
                     )
                   : ListView(
                       padding: const EdgeInsets.only(top: 6, bottom: 18),
@@ -419,42 +430,43 @@ class _ExportReportPageState extends State<ExportReportPage> {
                               _summaryRow(
                                 title: "Total Budget",
                                 value: "₹${_totalBudget.toStringAsFixed(2)}",
-                                valueColor: Colors.blue,
+                                valueColor: colorScheme.primary,
                               ),
                               const SizedBox(height: 6),
                               _summaryRow(
                                 title: "Total Expense",
                                 value: "₹${_totalExpense.toStringAsFixed(2)}",
-                                valueColor: Colors.redAccent,
+                                valueColor: colorScheme.error,
                               ),
                               const SizedBox(height: 6),
                               _summaryRow(
                                 title: "Remaining",
                                 value: "₹${_remaining.toStringAsFixed(2)}",
                                 valueColor: _remaining >= 0
-                                    ? Colors.green
-                                    : Colors.red,
+                                    ? colorScheme.secondary
+                                    : colorScheme.error,
                               ),
                               const SizedBox(height: 12),
                               if (!canExport)
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.withOpacity(0.12),
+                                    color: colorScheme.errorContainer
+                                        .withOpacity(0.4),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     children: [
                                       Icon(
                                         Icons.info_outline,
-                                        color: Colors.orange,
+                                        color: colorScheme.error,
                                       ),
                                       SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
                                           "Export will be enabled only after month ends.",
                                           style: TextStyle(
-                                            color: Colors.orange,
+                                            color: colorScheme.onErrorContainer,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -484,8 +496,10 @@ class _ExportReportPageState extends State<ExportReportPage> {
                                     ),
                                   ),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: colorScheme.primary,
+                                    foregroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(30),
@@ -509,9 +523,9 @@ class _ExportReportPageState extends State<ExportReportPage> {
                                     ),
                                   ),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                    side: const BorderSide(
-                                      color: Colors.blue,
+                                    foregroundColor: colorScheme.primary,
+                                    side: BorderSide(
+                                      color: colorScheme.primary,
                                       width: 1.3,
                                     ),
                                     shape: RoundedRectangleBorder(

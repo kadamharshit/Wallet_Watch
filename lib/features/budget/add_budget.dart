@@ -21,12 +21,16 @@ class _AddBudgetState extends State<AddBudget> {
   String? _selectedDate;
   String _mode = 'Cash';
 
+  bool _isSaving = false;
+
   List<String> _existingBanks = [];
 
   final List<Map<String, dynamic>> _bankInputs = [];
 
   static const String _addBudgetOnlineTourDoneKey =
       "walletwatch_add_budget_online_tour_done";
+
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   //  Showcase Keys
   final GlobalKey _dateKey = GlobalKey();
@@ -88,6 +92,10 @@ class _AddBudgetState extends State<AddBudget> {
 
   void _removeBankField(int index) {
     if (_bankInputs.length == 1) return;
+
+    _bankInputs[index]['bank'].dispose();
+    _bankInputs[index]['amount'].dispose();
+
     _bankInputs.removeAt(index);
     setState(() {});
   }
@@ -122,6 +130,8 @@ class _AddBudgetState extends State<AddBudget> {
   }
 
   Future<void> _saveBudget() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
 
@@ -239,6 +249,10 @@ class _AddBudgetState extends State<AddBudget> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      setState(() {
+        _isSaving = false;
+      });
     }
   }
 
@@ -289,16 +303,19 @@ class _AddBudgetState extends State<AddBudget> {
     required IconData icon,
     Widget? suffixIcon,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon),
+      prefixIcon: Icon(icon, color: colorScheme.primary),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: const Color(0xFFF6F6F6),
+      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(30),
         borderSide: BorderSide.none,
       ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16),
     );
   }
 
@@ -307,11 +324,14 @@ class _AddBudgetState extends State<AddBudget> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.4)
+                : Colors.black.withOpacity(0.08),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -335,13 +355,32 @@ class _AddBudgetState extends State<AddBudget> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF6F6F6),
+                color: colorScheme.surfaceVariant.withOpacity(0.4),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
                   Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          Text(
+                            "Bank ${index + 1}",
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const Spacer(),
+                          if (_bankInputs.length > 1)
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: colorScheme.error,
+                              ),
+                              onPressed: () => _removeBankField(index),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         value: _existingBanks.contains(c['bank'].text)
                             ? c['bank'].text
@@ -419,8 +458,8 @@ class _AddBudgetState extends State<AddBudget> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.blue,
-                side: const BorderSide(color: Colors.blue, width: 1.3),
+                foregroundColor: colorScheme.primary,
+                side: BorderSide(color: colorScheme.primary, width: 1.3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),
@@ -436,7 +475,7 @@ class _AddBudgetState extends State<AddBudget> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -444,13 +483,16 @@ class _AddBudgetState extends State<AddBudget> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.blue, Color(0xFF1E88E5)],
+                  colors: [
+                    colorScheme.primary,
+                    colorScheme.primary.withOpacity(0.75),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.only(
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(26),
                   bottomRight: Radius.circular(26),
                 ),
@@ -459,14 +501,17 @@ class _AddBudgetState extends State<AddBudget> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    icon: Icon(
+                      Icons.arrow_back,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       "Add Budget",
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.surface,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
@@ -476,10 +521,15 @@ class _AddBudgetState extends State<AddBudget> {
                     height: 40,
                     width: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.20),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surface.withOpacity(0.20),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.wallet, color: Colors.white),
+                    child: Icon(
+                      Icons.wallet,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
                   ),
                 ],
               ),
@@ -607,11 +657,11 @@ class _AddBudgetState extends State<AddBudget> {
                           margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.blue.withOpacity(0.10),
-                                Colors.blue.withOpacity(0.05),
-                              ],
+                            color: colorScheme.primaryContainer.withOpacity(
+                              0.4,
+                            ),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant,
                             ),
                             borderRadius: BorderRadius.circular(18),
                           ),
@@ -624,10 +674,10 @@ class _AddBudgetState extends State<AddBudget> {
                               const Spacer(),
                               Text(
                                 "₹${_onlineTotal.toStringAsFixed(2)}",
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
-                                  color: Colors.blue,
+                                  color: colorScheme.primary,
                                 ),
                               ),
                             ],
@@ -647,22 +697,30 @@ class _AddBudgetState extends State<AddBudget> {
                           height: 52,
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _saveBudget,
+                            onPressed: _isSaving ? null : _saveBudget,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
                               ),
-                              elevation: 0,
                             ),
-                            child: const Text(
-                              "Save Budget",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: _isSaving
+                                ? SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: colorScheme.onPrimary,
+                                    ),
+                                  )
+                                : const Text(
+                                    "Save Budget",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
