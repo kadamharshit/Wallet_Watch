@@ -18,6 +18,11 @@ class _EditExpensePageState extends State<EditExpensePage> {
   final _formKey = GlobalKey<FormState>();
 
   late String _dateString;
+
+  List<String> _availableBanks = [];
+
+  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+
   late TextEditingController _shopController;
   late TextEditingController _dateController;
 
@@ -42,20 +47,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
   final List<String> _modes = const ['Cash', 'Online'];
 
-  final List<String> _units = const [
-    'pcs',
-    'kg',
-    'g',
-    'L',
-    'ml',
-    'dozen',
-    'packet',
-    'bottle',
-    'box',
-    'other',
-  ];
-
-  ColorScheme get colorScheme => Theme.of(context).colorScheme;
+  final List<String> _units = const ['pcs', 'kg', 'g', 'L', 'ml'];
 
   @override
   void initState() {
@@ -82,11 +74,39 @@ class _EditExpensePageState extends State<EditExpensePage> {
     _bankController.text = (exp['bank'] ?? '').toString();
 
     _loadExistingItems();
+    _loadBanks();
 
     final amount = (exp['total'] as num?)?.toDouble() ?? 0.0;
     total = amount;
 
     _updateTotal();
+  }
+
+  Future<void> _loadBanks() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) return;
+
+    try {
+      final response = await supabase
+          .from('budgets')
+          .select('bank')
+          .eq('user_id', user.id)
+          .eq('mode', 'Online');
+
+      final banks = response
+          .map((e) => (e['bank'] ?? '').toString())
+          .where((b) => b.isNotEmpty)
+          .toSet()
+          .toList();
+
+      setState(() {
+        _availableBanks = banks;
+      });
+    } catch (e) {
+      debugPrint("Bank load error: $e");
+    }
   }
 
   void _loadExistingItems() {
@@ -323,7 +343,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: colorScheme.surface,
+        border: Border.all(color: colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -358,17 +379,14 @@ class _EditExpensePageState extends State<EditExpensePage> {
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: Icon(
-              Icons.arrow_back,
-              color: Theme.of(context).colorScheme.surface,
-            ),
+            icon: Icon(Icons.arrow_back, color: colorScheme.surface),
           ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               "Edit Expense",
               style: TextStyle(
-                color: Theme.of(context).colorScheme.surface,
+                color: colorScheme.surface,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -378,13 +396,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.20),
+              color: colorScheme.surface.withOpacity(0.20),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              Icons.edit_note,
-              color: Theme.of(context).colorScheme.surface,
-            ),
+            child: Icon(Icons.edit_note, color: colorScheme.surface),
           ),
         ],
       ),
@@ -408,17 +423,14 @@ class _EditExpensePageState extends State<EditExpensePage> {
           Row(
             children: [
               Text(
-                "Item ${index + 1}",
+                isTravel ? "Trip" : "Item ${index + 1}",
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
               if (itemInputs.length > 1)
                 IconButton(
                   onPressed: () => _removeItem(index),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.redAccent,
-                  ),
+                  icon: Icon(Icons.delete_outline, color: colorScheme.error),
                 ),
             ],
           ),
@@ -503,11 +515,18 @@ class _EditExpensePageState extends State<EditExpensePage> {
                       decimal: true,
                     ),
                     onChanged: (val) => item["qty"] = val,
-                    validator: (val) =>
-                        val == null || val.trim().isEmpty ? "Enter qty" : null,
+                    validator: (val) {
+                      final qty = double.tryParse(val ?? "");
+
+                      if (qty == null || qty <= 0) {
+                        return "Qty must be greater than 0";
+                      }
+
+                      return null;
+                    },
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
@@ -612,8 +631,12 @@ class _EditExpensePageState extends State<EditExpensePage> {
                           TextFormField(
                             controller: _shopController,
                             decoration: _pillDecoration(
-                              hint: "Shop Name / Type",
-                              icon: Icons.storefront_outlined,
+                              hint: _category == "Travel"
+                                  ? "Travel Provider"
+                                  : "Shop Name / Type",
+                              icon: _category == "Travel"
+                                  ? Icons.directions_bus_outlined
+                                  : Icons.storefront_outlined,
                             ),
                             validator: (val) =>
                                 val == null || val.trim().isEmpty
@@ -633,35 +656,43 @@ class _EditExpensePageState extends State<EditExpensePage> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (val) {
-                              if (val == null) return;
+                            onChanged: _category == "Travel"
+                                ? null
+                                : (val) {
+                                    if (val == null) return;
 
-                              setState(() {
-                                _category = val;
+                                    setState(() {
+                                      final previousCategory = _category;
+                                      _category = val;
 
-                                if (_category == "Travel") {
-                                  itemInputs = [
-                                    {
-                                      "mode": "",
-                                      "start": "",
-                                      "destination": "",
-                                      "amount": "",
-                                    },
-                                  ];
-                                } else {
-                                  itemInputs = [
-                                    {
-                                      "name": "",
-                                      "qty": "",
-                                      "unit": "pcs",
-                                      "amount": "",
-                                    },
-                                  ];
-                                }
+                                      // Only reset items if switching TO travel
+                                      if (previousCategory != "Travel" &&
+                                          _category == "Travel") {
+                                        itemInputs = [
+                                          {
+                                            "mode": "",
+                                            "start": "",
+                                            "destination": "",
+                                            "amount": "",
+                                          },
+                                        ];
+                                      }
+                                      // Switching FROM travel to others
+                                      else if (previousCategory == "Travel" &&
+                                          _category != "Travel") {
+                                        itemInputs = [
+                                          {
+                                            "name": "",
+                                            "qty": "",
+                                            "unit": "pcs",
+                                            "amount": "",
+                                          },
+                                        ];
+                                      }
 
-                                _updateTotal();
-                              });
-                            },
+                                      _updateTotal();
+                                    });
+                                  },
                             decoration: _pillDecoration(
                               hint: "Category",
                               icon: Icons.category_outlined,
@@ -695,12 +726,27 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
                           if (_mode == 'Online') ...[
                             const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _bankController,
+                            DropdownButtonFormField<String>(
+                              value: _bankController.text.isEmpty
+                                  ? null
+                                  : _bankController.text,
                               decoration: _pillDecoration(
-                                hint: "Bank (optional)",
+                                hint: "Select Bank",
                                 icon: Icons.account_balance_outlined,
                               ),
+                              items: _availableBanks
+                                  .map(
+                                    (bank) => DropdownMenuItem(
+                                      value: bank,
+                                      child: Text(bank),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _bankController.text = val ?? '';
+                                });
+                              },
                             ),
                           ],
                         ],
@@ -710,8 +756,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
                     _sectionContainer(
                       child: Row(
                         children: [
-                          const Text(
-                            "Total",
+                          Text(
+                            isTravel ? "Trip Cost" : "Total",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -723,7 +769,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 20,
-                              color: ColorScheme.of(context).primary,
+                              color: colorScheme.primary,
                             ),
                           ),
                         ],
@@ -752,32 +798,29 @@ class _EditExpensePageState extends State<EditExpensePage> {
                             (index) => _buildItemFields(index),
                           ),
                           const SizedBox(height: 4),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: OutlinedButton.icon(
-                              onPressed: _addItem,
-                              icon: const Icon(Icons.add),
-                              label: Text(
-                                isTravel
-                                    ? "Add Another Trip"
-                                    : "Add Another Item",
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                          if (!isTravel)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: OutlinedButton.icon(
+                                onPressed: _addItem,
+                                icon: const Icon(Icons.add),
+                                label: const Text(
+                                  "Add Another Item",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: colorScheme.primary,
-                                side: BorderSide(
-                                  color: ColorScheme.of(context).primary,
-                                  width: 1.3,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: colorScheme.primary,
+                                  side: BorderSide(
+                                    color: colorScheme.primary,
+                                    width: 1.3,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -803,9 +846,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.surface,
+                                    color: colorScheme.surface,
                                   ),
                                 )
                               : const Text(

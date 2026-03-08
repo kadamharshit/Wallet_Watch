@@ -263,11 +263,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      await DatabaseHelper.instance.clearAllTables();
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
 
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
+        // Clear local cache AFTER signout
+        await DatabaseHelper.instance.clearAllTables();
+
+        if (!mounted) return;
+
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Logout failed. Check connection.")),
+        );
       }
     }
   }

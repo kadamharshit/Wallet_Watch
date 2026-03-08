@@ -23,6 +23,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   String? _errorMessage;
   bool _isPasswordVisible = false;
 
+  // Convert DOB to YYYY-MM-DD (if provided)
+  String? dobIso;
+
   final supabase = Supabase.instance.client;
 
   Future<void> _registerUser() async {
@@ -40,19 +43,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       final mobile = mobileController.text.trim();
       final dob = dobController.text.trim();
 
-      final authResponse = await supabase.auth.signUp(
-        email: email,
-        password: password,
-      );
-
-      final user = authResponse.user;
-      if (user == null) {
-        setState(() => _errorMessage = "Account creation failed.");
-        return;
-      }
-
-      // Convert DOB to YYYY-MM-DD (if provided)
-      String? dobIso;
       if (dob.isNotEmpty) {
         try {
           final parts = dob.split('/');
@@ -62,22 +52,50 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           }
         } catch (_) {}
       }
+      final authResponse = await supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {'name': name, 'mobile': mobile, 'dob': dobIso},
+      );
 
-      await supabase.from('users').insert({
-        'id': user.id,
-        'name': name,
-        'mobile': mobile,
-        'email': email,
-        'dob': dobIso,
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      final user = authResponse.user;
+      if (user == null) {
+        setState(() => _errorMessage = "Account creation failed.");
+        return;
+      }
+
+      try {
+        await supabase.from('users').upsert({
+          'id': user.id,
+          'name': name,
+          'mobile': mobile,
+          'email': email,
+          'dob': dobIso,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint("User table insert skipped: $e");
+      }
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Account created!!")));
-
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Row(
+            children: const [
+              Icon(Icons.mark_email_read, color: Colors.white),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Account created! Please confirm your email before logging in.",
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(seconds: 2));
       Navigator.pushReplacementNamed(context, '/login');
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);

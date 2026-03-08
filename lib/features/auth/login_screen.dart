@@ -41,8 +41,16 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
-
       if (authRes.user != null) {
+        // EMAIL CONFIRMATION CHECK
+        if (authRes.user!.emailConfirmedAt == null) {
+          setState(() {
+            _errorMessage = "Please confirm your email before logging in.";
+          });
+
+          await supabase.auth.signOut();
+          return;
+        }
         const storage = FlutterSecureStorage();
         await storage.write(key: 'useremail', value: email);
         await storage.write(key: 'username', value: email.split('@').first);
@@ -129,11 +137,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _initialSupabaseToLocalSync(User user) async {
     // ALWAYS sync profile
-    final profile = await supabase
+    var profile = await supabase
         .from('users')
         .select()
         .eq('id', user.id)
         .maybeSingle();
+
+    if (profile == null) {
+      await supabase.from('users').upsert({
+        'id': user.id,
+        'email': user.email,
+        'name': user.userMetadata?['name'] ?? '',
+        'mobile': user.userMetadata?['mobile'] ?? '',
+        'dob': user.userMetadata?['dob'] ?? '',
+      });
+
+      profile = await supabase
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+    }
 
     if (profile != null) {
       await DatabaseHelper.instance.upsertUserProfile({

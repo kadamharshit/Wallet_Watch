@@ -393,30 +393,32 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                             ) ??
                                             0.0;
 
-                                  return Card(
-                                    elevation: 0,
+                                  return Container(
                                     margin: const EdgeInsets.symmetric(
                                       vertical: 4,
                                     ),
-                                    shape: RoundedRectangleBorder(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceVariant,
                                       borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    color: const Color(0xFFF6F6F6),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Row(
-                                        children: [
-                                          Expanded(child: Text(mode)),
-                                          Expanded(child: Text(start)),
-                                          Expanded(child: Text(dest)),
-                                          Expanded(
-                                            child: Text(
-                                              "₹${amt.toStringAsFixed(2)}",
-                                              textAlign: TextAlign.right,
-                                            ),
-                                          ),
-                                        ],
+                                      border: Border.all(
+                                        color: colorScheme.outline,
+                                        width: 1,
                                       ),
+                                    ),
+
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: Text(mode)),
+                                        Expanded(child: Text(start)),
+                                        Expanded(child: Text(dest)),
+                                        Expanded(
+                                          child: Text(
+                                            "₹${amt.toStringAsFixed(2)}",
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 } else {
@@ -432,30 +434,32 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                             ) ??
                                             0.0;
 
-                                  return Card(
-                                    elevation: 0,
+                                  return Container(
                                     margin: const EdgeInsets.symmetric(
                                       vertical: 4,
                                     ),
-                                    shape: RoundedRectangleBorder(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceVariant,
                                       borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    color: const Color(0xFFF6F6F6),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Row(
-                                        children: [
-                                          Expanded(child: Text(name)),
-                                          Expanded(child: Text(qty)),
-                                          Expanded(child: Text(unit)),
-                                          Expanded(
-                                            child: Text(
-                                              "₹${amt.toStringAsFixed(2)}",
-                                              textAlign: TextAlign.right,
-                                            ),
-                                          ),
-                                        ],
+                                      border: Border.all(
+                                        color: colorScheme.outline,
+                                        width: 1,
                                       ),
+                                    ),
+
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: Text(name)),
+                                        Expanded(child: Text(qty)),
+                                        Expanded(child: Text(unit)),
+                                        Expanded(
+                                          child: Text(
+                                            "₹${amt.toStringAsFixed(2)}",
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 }
@@ -762,6 +766,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       decoration: BoxDecoration(
         color: colorScheme.surfaceVariant.withOpacity(0.6),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Row(
         children: headers
