@@ -10,6 +10,7 @@ class AboutUs extends StatefulWidget {
 class _AboutUsState extends State<AboutUs> {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
+  //------------------------------------------UI---------------------------------------------
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -270,7 +271,7 @@ class _AboutUsState extends State<AboutUs> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      "expensetracker@gmail.com",
+                                      "kadamharshit07@gmail.com",
                                       style: TextStyle(
                                         fontSize: 13,
                                         color: colorScheme.onSurfaceVariant,

@@ -25,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final supabase = Supabase.instance.client;
 
+  //----------------------Function for Login--------------------------------
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -101,6 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  //--------------------------------UI----------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,
@@ -135,6 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  //-----------------------Function to Sync Supabase to SQLite (For Offline Access)-------------------------------
   Future<void> _initialSupabaseToLocalSync(User user) async {
     // ALWAYS sync profile
     var profile = await supabase
@@ -167,19 +170,14 @@ class _LoginScreenState extends State<LoginScreen> {
         'mobile': profile['mobile'] ?? '',
         'dob': profile['dob'] ?? '',
       });
-
-      debugPrint("User profile synced");
     }
 
     // Only skip expenses/budgets if exist
     final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
     if (!isEmpty) {
-      debugPrint("Expenses/Budgets already exist. Skipping their sync.");
       return;
     }
-
-    debugPrint("Syncing expenses & budgets...");
 
     final expenses = await supabase
         .from('expenses')
@@ -219,8 +217,6 @@ class _LoginScreenState extends State<LoginScreen> {
         'synced': 1,
       });
     }
-
-    debugPrint("Full sync complete");
   }
 
   @override

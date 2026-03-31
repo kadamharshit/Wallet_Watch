@@ -19,6 +19,7 @@ class _SplashScreenState extends State<SplashScreen> {
     _checkSession();
   }
 
+  //---------------------------Function to Check Session-----------------------------------
   Future<void> _checkSession() async {
     final session = supabase.auth.currentSession;
 
@@ -36,6 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
+  //-------------------------------------------UI------------------------------------------
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -68,7 +70,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ✅ LOGO IMAGE FROM ASSET
+                //  LOGO IMAGE FROM ASSET
                 Image.asset(
                   "assets/icon.png",
                   height: 96,

@@ -23,7 +23,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   List<Map<String, dynamic>> _expenses = [];
   //bool _isLoading = true;
   bool _hasLoadedLocal = false;
-  bool _isOnline = false;
+  //bool _isOnline = false;
 
   String _filterMode = 'All';
   String _selectedCatgeory = 'All';
@@ -58,6 +58,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     _loadExpenses();
   }
 
+  //--------------------------------App Tour---------------------------------------------
   Future<void> _startExpenseTrackerTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _expenseTrackerTourDoneKey);
     if (done == "true") return;
@@ -74,6 +75,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     await _secureStorage.write(key: _expenseTrackerTourDoneKey, value: "true");
   }
 
+  //------------------------------------Function to Check Internet Connection-----------------------------------
   Future<bool> _checkConnection() async {
     try {
       final result = await InternetAddress.lookup('example.com');
@@ -83,6 +85,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     }
   }
 
+  //--------------------------------------HELPER----------------------------------
   Future<void> _refreshExpenses() async {
     await _loadExpenses();
   }
@@ -102,6 +105,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     _availableMonths = months;
   }
 
+  //------------------------------Function to Load Expenses----------------------------
   Future<void> _loadExpenses() async {
     // STEP 1: Load local instantly
     final user = supabase.auth.currentUser;
@@ -125,6 +129,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     });
   }
 
+  //-----------------------------------Function to sync Expenses from Supabase------------------------------
   Future<void> _syncExpensesInBackground() async {
     final isOnline = await _checkConnection();
     final user = supabase.auth.currentUser;
@@ -173,9 +178,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           _buildAvailableMonths(_expenses);
         });
       }
-    } catch (e) {
-      debugPrint("Background sync error: $e");
-    }
+    } catch (e) {}
   }
 
   bool _listEqualsByUuid(
@@ -246,6 +249,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
+  //-----------------------------------------------UI-------------------------------------------
   Widget _infoRow(String label, dynamic value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -476,6 +480,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
+  //------------------------Function to Sync SQLite to Supabase--------------------------------
   Future<void> _syncLocalToSupabase() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -505,9 +510,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
           'supabase_id': response['id'],
           'synced': 1,
         });
-      } catch (e) {
-        debugPrint("Sync error: $e");
-      }
+      } catch (e) {}
     }
   }
 

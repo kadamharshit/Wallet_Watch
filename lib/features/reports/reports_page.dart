@@ -50,6 +50,7 @@ class _ReportsPageState extends State<ReportsPage> {
     _loadReports();
   }
 
+  //------------------------Function to Load Data---------------------------------------
   Future<void> _loadReports() async {
     setState(() => _isLoading = true);
 
@@ -137,6 +138,7 @@ class _ReportsPageState extends State<ReportsPage> {
     });
   }
 
+  //---------------------------Helper----------------------------------
   String _monthLabel(String m) {
     try {
       return DateFormat('MMMM yyyy').format(DateTime.parse("$m-01"));
@@ -159,6 +161,7 @@ class _ReportsPageState extends State<ReportsPage> {
     return _cashExpense >= _onlineExpense ? "Cash" : "Online";
   }
 
+  //---------------------------------UI-----------------------------------------
   Widget _buildHeader() {
     return Container(
       width: double.infinity,

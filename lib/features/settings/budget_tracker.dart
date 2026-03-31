@@ -47,10 +47,12 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     });
   }
 
+  //-------------------------------Function to Refresh-----------------------------
   Future<void> _refreshBudgets() async {
     await _loadBudgetsForMonth(_selectedMonth);
   }
 
+  //--------------------------App Tour----------------------------------------------
   Future<void> _startBudgetTrackerTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _budgetTrackerTourDoneKey);
     if (done == "true") return;
@@ -67,13 +69,12 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     await _secureStorage.write(key: _budgetTrackerTourDoneKey, value: "true");
   }
 
+  //-------------------------------Function to Load Budget-------------------------------------
   Future<void> _loadBudgetsForMonth(String month) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    final allBudgets = await DatabaseHelper.instance.getBudget(
-      user.id,
-    ); // ✅ FIX
+    final allBudgets = await DatabaseHelper.instance.getBudget(user.id);
 
     final months =
         allBudgets
@@ -120,6 +121,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     }).toList();
   }
 
+  //--------------------------------UI and Logic for Edit Budget------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> entry) async {
     final controller = TextEditingController(text: entry['total'].toString());
 
@@ -169,6 +171,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
+  //------------------------------------Function to Delete Budget----------------------------------------
   Future<bool> _confirmDelete(Map<String, dynamic> entry) async {
     final result = await showDialog<bool>(
       context: context,
@@ -209,6 +212,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     return false;
   }
 
+  //-------------------------------------UI---------------------------------------------------
   Widget _buildHeader() {
     return Container(
       width: double.infinity,

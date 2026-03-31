@@ -95,6 +95,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  //-------------------------Function for Loading Most Used Travel----------------------------
   Future<void> _loadMostUsedTravels() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -139,6 +140,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  //----------------------------------App Tour-------------------------------------
   Future<void> _startAddExpenseTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _addExpenseTourDoneKey);
     if (done == "true") return;
@@ -155,6 +157,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     await _secureStorage.write(key: _addExpenseTourDoneKey, value: "true");
   }
 
+  //----------------------------Function to check internet Connection--------------------------
   Future<bool> _hasInternetConnection() async {
     try {
       final result = await InternetAddress.lookup('example.com');
@@ -164,6 +167,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
+  //----------------------------Fetch Available----------------------------------
   Future<void> _fetchAvailableBanks() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -185,6 +189,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   void _addItem() => setState(() => itemInputs.add({}));
 
+  //--------------------HELPER-----------------------------------
   void _removeItem(int index) {
     if (itemInputs.length == 1) return;
     setState(() {
@@ -238,14 +243,14 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
-  Future<void> _loadRecentTravels() async {
-    final data = await DatabaseHelper.instance.getRecentTravelExpenses(
-      limit: 5,
-    );
-    setState(() {
-      _recentTravels = data;
-    });
-  }
+  // Future<void> _loadRecentTravels() async {
+  //   final data = await DatabaseHelper.instance.getRecentTravelExpenses(
+  //     limit: 5,
+  //   );
+  //   setState(() {
+  //     _recentTravels = data;
+  //   });
+  // }
 
   void _applyTravelTemplate(Map<String, dynamic> exp) {
     final raw = (exp['items'] ?? '').toString().trim();
@@ -285,11 +290,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           _showItemsSection = true;
         });
       }
-    } catch (e) {
-      debugPrint("Failed to apply travel template: $e");
-    }
+    } catch (e) {}
   }
 
+  //------------------------------Function to Save Expense----------------------------------
   Future<void> _saveExpense() async {
     if (_isSaving) return;
 
@@ -379,7 +383,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           'synced': 1,
         });
       } catch (e) {
-        debugPrint("Supabase insert failed, saved offline: $e");
       } finally {
         if (mounted) {
           setState(() {
@@ -396,6 +399,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     Navigator.pop(context, true);
   }
 
+  //-------------------------------Date Picker-------------------------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -410,6 +414,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
+  //-----------------------------UI--------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

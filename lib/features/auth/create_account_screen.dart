@@ -28,6 +28,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   final supabase = Supabase.instance.client;
 
+  //-------------------------------Function for Register The User---------------------------
   Future<void> _registerUser() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -73,9 +74,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           'dob': dobIso,
           'created_at': DateTime.now().toIso8601String(),
         });
-      } catch (e) {
-        debugPrint("User table insert skipped: $e");
-      }
+      } catch (e) {}
 
       if (!mounted) return;
 
@@ -100,13 +99,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
-      debugPrint("Register error: $e");
       setState(() => _errorMessage = "Something went wrong. Try again.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  //-------------------------------Date Picker--------------------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -120,6 +119,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
   }
 
+  //--------------------------------------UI----------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

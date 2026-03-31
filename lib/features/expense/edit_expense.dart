@@ -82,6 +82,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     _updateTotal();
   }
 
+  //-------------------------------Function to Load Banks Available---------------------------
   Future<void> _loadBanks() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -104,11 +105,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
       setState(() {
         _availableBanks = banks;
       });
-    } catch (e) {
-      debugPrint("Bank load error: $e");
-    }
+    } catch (e) {}
   }
 
+  //--------------------------------------Function to Load Existing Items in Expense----------------------------------
   void _loadExistingItems() {
     final raw = (widget.expense['items'] ?? '').toString().trim();
 
@@ -174,6 +174,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     if (itemInputs.isEmpty) itemInputs = [{}];
   }
 
+  //-------------------------HELPER------------------------------------
   void _updateTotal() {
     total = itemInputs.fold(0.0, (sum, i) {
       return sum + (double.tryParse(i['amount'] ?? '0') ?? 0);
@@ -204,6 +205,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     });
   }
 
+  //-----------------------------Date Picker---------------------------------
   Future<void> _pickDate() async {
     final initial = DateTime.tryParse(_dateString) ?? DateTime.now();
 
@@ -242,6 +244,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     return jsonEncode(list);
   }
 
+  //---------------------------------Function to Save Changes Made-----------------------------
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -311,7 +314,6 @@ class _EditExpensePageState extends State<EditExpensePage> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      debugPrint('Edit error: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to update expense: $e')));
@@ -320,6 +322,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     }
   }
 
+  //-----------------------------------------------UI-------------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

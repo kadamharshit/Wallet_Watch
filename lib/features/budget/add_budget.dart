@@ -57,6 +57,7 @@ class _AddBudgetState extends State<AddBudget> {
     });
   }
 
+  //---------------------------------------App Tour---------------------------------------------
   Future<void> _startAddBudgetTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _addBudgetTourDoneKey);
     if (done == "true") return;
@@ -79,6 +80,7 @@ class _AddBudgetState extends State<AddBudget> {
     setState(() {});
   }
 
+  //----------------------------------Function to Load Available Banks----------------------------------
   Future<void> _loadBanks() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -108,6 +110,7 @@ class _AddBudgetState extends State<AddBudget> {
     return sum;
   }
 
+  //------------------------------------Function to Detect Duplicate Banks------------------------------------
   bool _hasDuplicateBanks() {
     final names = _bankInputs
         .map((b) => b['bank'].text.trim().toLowerCase())
@@ -116,6 +119,7 @@ class _AddBudgetState extends State<AddBudget> {
     return names.length != names.toSet().length;
   }
 
+  //--------------------------------Date Picker-------------------------------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -129,6 +133,7 @@ class _AddBudgetState extends State<AddBudget> {
     }
   }
 
+  //-------------------------Function to Save Budget----------------------------------------
   Future<void> _saveBudget() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -206,7 +211,7 @@ class _AddBudgetState extends State<AddBudget> {
 
           final localId = await DatabaseHelper.instance.insertBudget({
             'uuid': uuid,
-            'user_id': user.id, // REQUIRED FIX
+            'user_id': user.id,
             'date': date,
             'mode': 'Online',
             'total': amount,
@@ -256,6 +261,7 @@ class _AddBudgetState extends State<AddBudget> {
     }
   }
 
+  //--------------------------------Function to Sync Budget--------------------------------------------
   Future<void> _syncPendingBudgets() async {
     if (!await _hasInternetConnection()) return;
 
@@ -288,6 +294,7 @@ class _AddBudgetState extends State<AddBudget> {
     }
   }
 
+  //-------------------------------Function to Check Internet Connection-----------------------------
   Future<bool> _hasInternetConnection() async {
     try {
       final res = await InternetAddress.lookup('example.com');
@@ -297,7 +304,7 @@ class _AddBudgetState extends State<AddBudget> {
     }
   }
 
-  //  Common pill decoration
+  //-------------------------------------UI-------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

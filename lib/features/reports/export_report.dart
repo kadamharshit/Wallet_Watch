@@ -41,6 +41,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     _loadMonthsAndData();
   }
 
+  //-------------------------------Function to Check Is Month Completed--------------------------------
   bool _isMonthCompleted(String monthKey) {
     final selected = DateTime.parse("$monthKey-01");
     final now = DateTime.now();
@@ -48,6 +49,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     return now.isAfter(nextMonth) || now.isAtSameMomentAs(nextMonth);
   }
 
+  //---------------------------Function to Load Data--------------------------------
   Future<void> _loadMonthsAndData() async {
     setState(() => _isLoading = true);
 
@@ -102,6 +104,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     });
   }
 
+  //-----------------------------Helper-----------------------------------
   String _monthLabel(String m) {
     try {
       return DateFormat('MMMM yyyy').format(DateTime.parse("$m-01"));
@@ -112,6 +115,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
 
   double get _remaining => _totalBudget - _totalExpense;
 
+  //---------------------------Function to Export PDF-------------------------------------
   Future<void> _exportPdf() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -208,6 +212,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     await Share.shareXFiles([XFile(file.path)], text: "WalletWatch Report PDF");
   }
 
+  //-----------------------------------Function to Export Excel-------------------------------
   Future<void> _exportExcel() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -283,6 +288,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     ], text: "WalletWatch Report Excel");
   }
 
+  //-----------------------------UI-------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

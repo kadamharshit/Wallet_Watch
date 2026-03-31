@@ -131,11 +131,10 @@ class _HomeScreenState extends State<HomeScreen> {
           'dob': response['dob'] ?? '',
         });
       }
-    } catch (_) {
-      debugPrint("Offline mode: using cached user profile");
-    }
+    } catch (_) {}
   }
 
+  //----------------Function for App Tour----------------------
   Future<void> _startTourIfFirstTime() async {
     final done = await _secureStorage.read(key: _homeTourKey);
     if (done == "true") return;
@@ -155,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _secureStorage.write(key: _homeTourKey, value: "true");
   }
 
+  //--------------------------------Function to Load Expenses from Supabase----------------------
   Future<void> _loadExpensesSeparately() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -162,9 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final expenses = await DatabaseHelper.instance.getExpenses(
-      user.id,
-    ); // ✅ FIXED
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
 
     double cash = 0.0;
     double online = 0.0;
@@ -191,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  //----------------------Function to Load Budget from Supabase------------------
   Future<void> _loadBudgetsSeparately() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -236,12 +235,14 @@ class _HomeScreenState extends State<HomeScreen> {
         : (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
+  //--------------Refresh--------------------
   Future<void> _refreshAll() async {
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
     //await _loadShoppingList();
   }
 
+  //-----------------Function for Logout---------------------
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
