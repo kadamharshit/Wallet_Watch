@@ -83,6 +83,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   static const String _addExpenseOnlineBankTourDoneKey =
       "walletwatch_add_expense_online_bank_tour_done";
 
+  static const double WARNING_LIMIT = 50000;
+  static const double MAX_LIMIT = 200000;
+
   @override
   void initState() {
     super.initState();
@@ -306,6 +309,21 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       );
       return;
     }
+    if (total > MAX_LIMIT) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Total expense cannot exceed ₹2,00,000')),
+      );
+      return;
+    }
+    if (total > WARNING_LIMIT) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('High expense amount'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
     setState(() => _isSaving = true);
 
     final supabase = Supabase.instance.client;
@@ -500,6 +518,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   _travelModeController.text = val ?? "";
                 });
               },
+              validator: (val) =>
+                  val == null || val.isEmpty ? "Select mode" : null,
               decoration: _pillDecoration(
                 hint: "Transport Mode",
                 icon: Icons.directions,
@@ -514,7 +534,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ),
               onChanged: (val) => item['start'] = val,
               validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter start point' : null,
+                  val == null || val.isEmpty ? 'Enter start location' : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
@@ -539,8 +559,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 item['amount'] = val;
                 _updateTotal();
               },
-              validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter amount' : null,
+              validator: (val) {
+                final amt = double.tryParse(val ?? '');
+
+                if (amt == null || amt <= 0) {
+                  return 'Enter valid amount';
+                }
+
+                if (amt > MAX_LIMIT) {
+                  return 'Max ₹2,00,000 allowed';
+                }
+
+                return null;
+              },
             ),
           ] else ...[
             TextFormField(
@@ -604,8 +635,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 item['amount'] = val;
                 _updateTotal();
               },
-              validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter amount' : null,
+              validator: (val) {
+                final amt = double.tryParse(val ?? '');
+
+                if (amt == null || amt <= 0) {
+                  return 'Enter valid amount';
+                }
+
+                if (amt > MAX_LIMIT) {
+                  return 'Max ₹2,00,000 allowed';
+                }
+
+                return null;
+              },
             ),
           ],
         ],

@@ -35,6 +35,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
   static const String _budgetTrackerTourDoneKey =
       "walletwatch_budget_tracker_tour_done";
 
+  static const double WARNING_LIMIT = 50000;
+  static const double MAX_LIMIT = 200000;
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   @override
@@ -143,22 +145,42 @@ class _BudgetTrackerState extends State<BudgetTracker> {
           ElevatedButton(
             onPressed: () async {
               final value = double.tryParse(controller.text);
-              if (value != null) {
-                await DatabaseHelper.instance.updateBudget(entry['id'], {
-                  'total': value,
-                });
 
-                final supabaseId = entry['supabase_id'];
-                if (supabaseId != null) {
-                  await Supabase.instance.client
-                      .from('budgets')
-                      .update({'total': value})
-                      .eq('id', supabaseId);
-                }
-
-                Navigator.pop(context);
-                _loadBudgetsForMonth(_selectedMonth);
+              if (value == null || value <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Enter valid amount")),
+                );
+                return;
               }
+
+              if (value > MAX_LIMIT) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Max ₹2,00,000 allowed")),
+                );
+                return;
+              }
+
+              if (value > WARNING_LIMIT) {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("High budget amount")),
+                );
+              }
+
+              await DatabaseHelper.instance.updateBudget(entry['id'], {
+                'total': value,
+              });
+
+              final supabaseId = entry['supabase_id'];
+              if (supabaseId != null) {
+                await Supabase.instance.client
+                    .from('budgets')
+                    .update({'total': value})
+                    .eq('id', supabaseId);
+              }
+
+              Navigator.pop(context);
+              _loadBudgetsForMonth(_selectedMonth);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,

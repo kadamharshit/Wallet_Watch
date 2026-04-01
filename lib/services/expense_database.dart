@@ -9,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('walletwatch.db');
+    _database = await _initDB('walletwatch_v2.db');
     return _database!;
   }
 
@@ -49,6 +49,9 @@ class DatabaseHelper {
           dob TEXT
         )
       ''');
+          await db.execute(
+            "ALTER TABLE budget ADD COLUMN carry_forward INTEGER DEFAULT 1",
+          );
         }
       },
     );
@@ -82,7 +85,9 @@ CREATE TABLE budget (
   total REAL,
   mode TEXT,
   bank TEXT,
-  synced INTEGER DEFAULT 0
+  synced INTEGER DEFAULT 0,
+  carry_forward INTEGER DEFAULT 1 
+ 
 )
 ''');
     await db.execute('''
@@ -175,6 +180,8 @@ CREATE TABLE IF NOT EXISTS user_profile (
 
   Future<int> insertBudget(Map<String, dynamic> budget) async {
     final db = await database;
+
+    budget['carry_forward'] = budget['carry_forward'] ?? 1;
     return await db.insert(
       'budget',
       budget,

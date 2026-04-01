@@ -29,6 +29,7 @@ class _AddBudgetState extends State<AddBudget> {
 
   static const String _addBudgetOnlineTourDoneKey =
       "walletwatch_add_budget_online_tour_done";
+  bool carryForward = true;
 
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
@@ -44,6 +45,9 @@ class _AddBudgetState extends State<AddBudget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addBudgetTourDoneKey =
       "walletwatch_add_budget_tour_done";
+
+  static const double WARNING_LIMIT = 50000;
+  static const double MAX_LIMIT = 200000;
 
   @override
   void initState() {
@@ -146,6 +150,14 @@ class _AddBudgetState extends State<AddBudget> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Each bank name must be unique")),
       );
+      setState(() => _isSaving = false);
+      return;
+    }
+    if (_mode == 'Online' && _onlineTotal > MAX_LIMIT) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Total budget cannot exceed ₹2,00,000")),
+      );
+      setState(() => _isSaving = false);
       return;
     }
 
@@ -161,6 +173,15 @@ class _AddBudgetState extends State<AddBudget> {
         final amount = double.tryParse(_cashAmountController.text) ?? 0.0;
         if (amount <= 0) return;
 
+        if (amount > WARNING_LIMIT) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("High budget amount entered"),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
         final uuid = const Uuid().v4();
 
         final localId = await DatabaseHelper.instance.insertBudget({
@@ -172,6 +193,7 @@ class _AddBudgetState extends State<AddBudget> {
           'bank': '',
           'synced': 0,
           'supabase_id': null,
+          'carry_forward': carryForward ? 1 : 0,
         });
 
         if (await _hasInternetConnection()) {
@@ -218,6 +240,7 @@ class _AddBudgetState extends State<AddBudget> {
             'bank': bankName,
             'synced': 0,
             'supabase_id': null,
+            'carry_forward': carryForward ? 1 : 0,
           });
 
           if (await _hasInternetConnection()) {
@@ -251,14 +274,22 @@ class _AddBudgetState extends State<AddBudget> {
         Navigator.pop(context);
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Something went wrong. Try again.")),
+      );
     } finally {
       setState(() {
         _isSaving = false;
       });
     }
+  }
+
+  // -----------------------------Helper----------------------------------
+  bool isNewMonth(String lastDate) {
+    final last = DateTime.parse(lastDate);
+    final now = DateTime.now();
+
+    return last.month != now.month || last.year != now.year;
   }
 
   //--------------------------------Function to Sync Budget--------------------------------------------
@@ -445,6 +476,9 @@ class _AddBudgetState extends State<AddBudget> {
                     validator: (v) {
                       final amt = double.tryParse(v ?? '');
                       if (amt == null || amt <= 0) return 'Enter valid amount';
+                      if (amt > MAX_LIMIT) {
+                        return 'Max ₹2L per bank';
+                      }
                       return null;
                     },
                     onChanged: (_) => setState(() {}),
@@ -646,6 +680,9 @@ class _AddBudgetState extends State<AddBudget> {
                               if (amt == null || amt <= 0) {
                                 return 'Enter valid amount';
                               }
+                              if (amt > MAX_LIMIT) {
+                                return 'Ammout too large (max  ₹2,00,000)';
+                              }
                               return null;
                             },
                           ),
@@ -692,6 +729,16 @@ class _AddBudgetState extends State<AddBudget> {
                         ),
                       ),
 
+                    const SizedBox(height: 6),
+                    SwitchListTile(
+                      title: const Text("Carry forward to next month"),
+                      value: carryForward,
+                      onChanged: (val) {
+                        setState(() {
+                          carryForward = val;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 6),
 
                     // Save button
