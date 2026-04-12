@@ -970,6 +970,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
             _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
+            _drawerItem(Icons.feedback, "Feedback", '/feedback'),
             const Divider(),
 
             ListTile(

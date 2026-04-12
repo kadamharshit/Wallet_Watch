@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:walletwatch/features/settings/feedback_page.dart';
 
 import 'package:walletwatch/providers/theme_provider.dart';
 import 'package:walletwatch/theme/app_theme.dart';
@@ -23,6 +24,8 @@ import 'package:walletwatch/features/settings/how_to_use.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadTheme();
   await dotenv.load(fileName: ".env");
 
   await Supabase.initialize(
@@ -31,8 +34,8 @@ void main() async {
   );
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    ChangeNotifierProvider.value(
+      value: themeProvider,
       child: ShowCaseWidget(builder: (context) => const MyApp()),
     ),
   );
@@ -67,6 +70,7 @@ class MyApp extends StatelessWidget {
         '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
         "/export_report": (context) => const ExportReportPage(),
+        '/feedback': (context) => const FeedbackPage(),
       },
     );
   }

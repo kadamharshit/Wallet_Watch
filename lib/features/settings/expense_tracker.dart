@@ -896,6 +896,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
