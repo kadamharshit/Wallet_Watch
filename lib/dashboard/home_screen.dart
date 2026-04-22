@@ -31,6 +31,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _useremail = '';
 
+  bool _isAmountVisible = false;
+
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -73,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initHome();
+    _loadVisibility();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndHandleNewMonth();
     });
@@ -111,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
     if (isEmpty) {
-      await _syncFromSupabase(user.id); // 🔥 ADD THIS
+      await _syncFromSupabase(user.id); // ADD THIS
     }
     await _loadUserInfo();
     await _loadBudgetsSeparately();
@@ -124,6 +127,13 @@ class _HomeScreenState extends State<HomeScreen> {
       await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       _startTourIfFirstTime();
+    });
+  }
+
+  Future<void> _loadVisibility() async {
+    final value = await _secureStorage.read(key: 'amount_visible');
+    setState(() {
+      _isAmountVisible = value == "true";
     });
   }
 
@@ -255,6 +265,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final d = DateTime.parse(date);
     final now = DateTime.now();
     return d.month == now.month && d.year == now.year;
+  }
+
+  String hideAmount(String amount) {
+    return _isAmountVisible ? amount : "₹ ••••";
   }
 
   //--------------------------------Function to Carry Forward--------------------------------
@@ -536,7 +550,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 🔥 Icon
+              //  Icon
               Container(
                 height: 50,
                 width: 50,
@@ -549,7 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 14),
 
-              // 🧠 Title
+              // Title
               Text(
                 "New Month Started",
                 style: TextStyle(
@@ -561,7 +575,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 8),
 
-              // 📄 Content
+              // Content
               Text(
                 "Do you want to carry forward last month's budget or reset it?",
                 textAlign: TextAlign.center,
@@ -573,10 +587,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 20),
 
-              // 🔘 Buttons
+              // Buttons
               Row(
                 children: [
-                  // ❌ Reset Button
+                  // Reset Button
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
@@ -596,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(width: 12),
 
-                  // ✅ Carry Forward Button
+                  // Carry Forward Button
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
@@ -654,6 +668,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               foregroundColor: colorScheme.surface,
               elevation: 0,
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    _isAmountVisible ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () async {
+                    setState(() {
+                      _isAmountVisible = !_isAmountVisible;
+                    });
+                    await _secureStorage.write(
+                      key: 'amount_visible',
+                      value: _isAmountVisible.toString(),
+                    );
+                  },
+                ),
+              ],
             ),
 
             SliverToBoxAdapter(
@@ -662,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     _buildTotalRemainingCard(),
-                    //if (_activeShoppingList != null) _buildShoppingListCard(),
+
                     const SizedBox(height: 8),
                     _buildPieCard(),
                     _buildRemainingRow(),
@@ -724,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    "₹ ${_totalRemaining.toStringAsFixed(2)}",
+                    hideAmount("₹ ${_totalRemaining.toStringAsFixed(2)}"),
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -964,7 +994,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 6),
             _drawerItem(Icons.person, "My Profile", '/profiles'),
             _drawerItem(Icons.info, "About Us", '/about'),
-            //_drawerItem(Icons.shopping_cart, "Shopping List", '/shopping_list'),
+
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
@@ -1057,7 +1087,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            "₹ ${amount.toStringAsFixed(2)}",
+            hideAmount("₹ ${amount.toStringAsFixed(2)}"),
             style: TextStyle(
               color: _amountColor(amount),
               fontWeight: FontWeight.bold,

@@ -73,37 +73,31 @@ class _FeedbackPageState extends State<FeedbackPage> {
   Future<void> _saveFeedback() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-
-    if (user == null) return;
-
-    bool saved = false;
 
     try {
-      final uuid = const Uuid().v4();
+      final user = supabase.auth.currentUser;
+
+      if (user == null) return;
+      // final uuid = const Uuid().v4();
       final email = _senderEmailController.text;
       final message = _messageController.text;
       final category = _selectedCategory;
-      final res = await supabase
-          .from('feedback')
-          .insert({
-            'uuid': uuid,
-            'user_id': user.id,
-            'email': email,
-            'message': message,
-            'category': category,
-          })
-          .select('id')
-          .single();
-
-      saved = true;
-
-      if (saved) {
+      final res = await supabase.functions.invoke(
+        'submit-feedback',
+        body: {
+          "user_id": user.id,
+          "email": email,
+          "message": message,
+          "category": category,
+        },
+      );
+      if (res.status == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Feedback Saved Successfully")),
+          const SnackBar(content: Text("Feedback Sent Successfully")),
         );
         Navigator.pop(context);
+      } else {
+        throw Exception("Failed to send feedback");
       }
     } catch (e) {
       debugPrint("Error message: $e");
@@ -351,15 +345,6 @@ class _FeedbackPageState extends State<FeedbackPage> {
                     ],
                   ),
                 ),
-
-                // ElevatedButton.icon(
-                //   onPressed: _saveFeedback,
-                //   icon: Icon(Icons.save),
-                //   label: Text("Save Feedback"),
-                //   style: ElevatedButton.styleFrom(
-                //     backgroundColor: colorScheme.surfaceVariant,
-                //   ),
-                // ),
               ),
             ],
           ),
