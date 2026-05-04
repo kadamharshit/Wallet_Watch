@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
+import 'package:walletwatch/features/budget/transfer_screen.dart';
 
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -365,7 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final budgets = await DatabaseHelper.instance.getBudget(user.id); // ✅ FIXED
+    final budgets = await DatabaseHelper.instance.getBudget(user.id);
+    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
 
     double cash = 0.0;
     double online = 0.0;
@@ -375,13 +377,28 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!date.startsWith(currentMonth)) continue;
 
       final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
-      final mode = (entry['mode'] ?? 'Cash').toString();
+      final mode = (entry['mode'] ?? 'Cash').toString().toLowerCase();
 
-      if (mode == 'Online') {
+      if (mode == 'online') {
         online += amount;
       } else {
         cash += amount;
       }
+    }
+    for (final t in transfers) {
+      final date = (t['date'] ?? '').toString();
+      if (!date.startsWith(currentMonth)) continue;
+
+      final amount = (t['amount'] as num?)?.toDouble() ?? 0.0;
+
+      final from = (t['from_type'] ?? '').toString().toLowerCase();
+      final to = (t['to_type'] ?? '').toString().toLowerCase();
+
+      if (from == 'cash') cash -= amount;
+      if (to == 'cash') cash += amount;
+
+      if (from == 'online') online -= amount;
+      if (to == 'online') online += amount;
     }
 
     if (!mounted) return;
@@ -929,6 +946,58 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.sync_alt),
+                label: const Text(
+                  "Transfer",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TransferScreen(
+                        cashBalance: _cashRemaining,
+                        onlineBalance: _onlineRemaining,
+                      ),
+                    ),
+                  );
+                  if (result == true) {
+                    await _loadBudgetsSeparately();
+                  }
+                },
+              ),
+            ),
+
+            // ElevatedButton(
+            //   onPressed: () async {
+            //     final result = await Navigator.push(
+            //       context,
+            //       MaterialPageRoute(
+            //         builder: (_) => TransferScreen(
+            //           cashBalance: _cashRemaining,
+            //           onlineBalance: _onlineRemaining,
+            //         ),
+            //       ),
+            //     );
+
+            //     if (result == true) {
+            //       await _loadBudgetsSeparately();
+            //     }
+            //   },
+            //   child: Text("Test Transfer"),
+            // ),
           ],
         ),
       ),

@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -53,6 +53,21 @@ class DatabaseHelper {
             "ALTER TABLE budget ADD COLUMN carry_forward INTEGER DEFAULT 1",
           );
         }
+        if (oldVersion < 7) {
+          await db.execute('''
+    CREATE TABLE transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE,
+      user_id TEXT,
+      from_type TEXT,
+      to_type TEXT,
+      from_bank TEXT,
+      to_bank TEXT,
+      amount REAL,
+      date TEXT
+    )
+  ''');
+        }
       },
     );
   }
@@ -74,7 +89,20 @@ CREATE TABLE expenses (
   synced INTEGER DEFAULT 0
 )
 ''');
-
+    await db.execute('''
+CREATE TABLE transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid TEXT UNIQUE,
+  user_id TEXT,
+  from_type TEXT,
+  to_type TEXT,
+  from_bank TEXT,
+  to_bank TEXT,
+  amount REAL,
+  date TEXT
+ 
+)
+''');
     await db.execute('''
 CREATE TABLE budget (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -324,5 +352,22 @@ CREATE TABLE IF NOT EXISTS user_profile (
     );
 
     return res.isEmpty ? null : res.first;
+  }
+
+  //----------------TRANSFERS------------------------------
+  Future<int> insertTransfer(Map<String, dynamic> transfer) async {
+    final db = await database;
+    return await db.insert('transfers', transfer);
+  }
+
+  Future<List<Map<String, dynamic>>> getTransfers(String userId) async {
+    final db = await database;
+
+    return await db.query(
+      'transfers',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'date DESC',
+    );
   }
 }

@@ -729,16 +729,16 @@ class _AddBudgetState extends State<AddBudget> {
                         ),
                       ),
 
-                    const SizedBox(height: 6),
-                    SwitchListTile(
-                      title: const Text("Carry forward to next month"),
-                      value: carryForward,
-                      onChanged: (val) {
-                        setState(() {
-                          carryForward = val;
-                        });
-                      },
-                    ),
+                    // const SizedBox(height: 6),
+                    // SwitchListTile(
+                    //   title: const Text("Carry forward to next month"),
+                    //   value: carryForward,
+                    //   onChanged: (val) {
+                    //     setState(() {
+                    //       carryForward = val;
+                    //     });
+                    //   },
+                    // ),
                     const SizedBox(height: 6),
 
                     // Save button
