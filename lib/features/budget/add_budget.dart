@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:walletwatch/services/sync_service.dart';
 
 class AddBudget extends StatefulWidget {
   const AddBudget({super.key});
@@ -53,7 +53,7 @@ class _AddBudgetState extends State<AddBudget> {
   void initState() {
     super.initState();
     _addBankField();
-    _syncPendingBudgets();
+
     _loadBanks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,7 +81,9 @@ class _AddBudgetState extends State<AddBudget> {
       'amount': TextEditingController(),
       'amountKey': GlobalKey<FormFieldState>(),
     });
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   //----------------------------------Function to Load Available Banks----------------------------------
@@ -168,10 +170,16 @@ class _AddBudgetState extends State<AddBudget> {
 
     try {
       if (_mode == 'Cash') {
-        if (!_formKey.currentState!.validate()) return;
+        if (!_formKey.currentState!.validate()) {
+          setState(() => _isSaving = false);
+          return;
+        }
 
         final amount = double.tryParse(_cashAmountController.text) ?? 0.0;
-        if (amount <= 0) return;
+        if (amount <= 0) {
+          setState(() => _isSaving = false);
+          return;
+        }
 
         if (amount > WARNING_LIMIT) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -184,7 +192,7 @@ class _AddBudgetState extends State<AddBudget> {
 
         final uuid = const Uuid().v4();
 
-        final localId = await DatabaseHelper.instance.insertBudget({
+        await DatabaseHelper.instance.insertBudget({
           'uuid': uuid,
           'user_id': user.id,
           'date': date,
@@ -195,25 +203,6 @@ class _AddBudgetState extends State<AddBudget> {
           'supabase_id': null,
           'carry_forward': carryForward ? 1 : 0,
         });
-
-        if (await _hasInternetConnection()) {
-          final res = await supabase
-              .from('budgets')
-              .insert({
-                'uuid': uuid,
-                'user_id': user.id,
-                'date': date,
-                'mode': 'Cash',
-                'total': amount,
-              })
-              .select('id')
-              .single();
-
-          await DatabaseHelper.instance.updateBudget(localId, {
-            'supabase_id': res['id'],
-            'synced': 1,
-          });
-        }
 
         saved = true;
       } else {
@@ -231,7 +220,7 @@ class _AddBudgetState extends State<AddBudget> {
 
           final uuid = const Uuid().v4();
 
-          final localId = await DatabaseHelper.instance.insertBudget({
+          await DatabaseHelper.instance.insertBudget({
             'uuid': uuid,
             'user_id': user.id,
             'date': date,
@@ -243,26 +232,6 @@ class _AddBudgetState extends State<AddBudget> {
             'carry_forward': carryForward ? 1 : 0,
           });
 
-          if (await _hasInternetConnection()) {
-            final res = await supabase
-                .from('budgets')
-                .insert({
-                  'uuid': uuid,
-                  'user_id': user.id,
-                  'date': date,
-                  'mode': 'Online',
-                  'total': amount,
-                  'bank': bankName,
-                })
-                .select('id')
-                .single();
-
-            await DatabaseHelper.instance.updateBudget(localId, {
-              'supabase_id': res['id'],
-              'synced': 1,
-            });
-          }
-
           saved = true;
         }
       }
@@ -271,6 +240,7 @@ class _AddBudgetState extends State<AddBudget> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Budget saved successfully ✅")),
         );
+        await SyncService.syncAll();
         Navigator.pop(context);
       }
     } catch (e) {
@@ -290,49 +260,6 @@ class _AddBudgetState extends State<AddBudget> {
     final now = DateTime.now();
 
     return last.month != now.month || last.year != now.year;
-  }
-
-  //--------------------------------Function to Sync Budget--------------------------------------------
-  Future<void> _syncPendingBudgets() async {
-    if (!await _hasInternetConnection()) return;
-
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final unsynced = await DatabaseHelper.instance.getUnsyncedBudgets(user.id);
-
-    for (final b in unsynced) {
-      try {
-        final res = await supabase
-            .from('budgets')
-            .insert({
-              'uuid': b['uuid'],
-              'user_id': user.id,
-              'date': b['date'],
-              'mode': b['mode'],
-              'total': b['total'],
-              'bank': b['bank'],
-            })
-            .select('id')
-            .single();
-
-        await DatabaseHelper.instance.updateBudget(b['id'], {
-          'supabase_id': res['id'],
-          'synced': 1,
-        });
-      } catch (_) {}
-    }
-  }
-
-  //-------------------------------Function to Check Internet Connection-----------------------------
-  Future<bool> _hasInternetConnection() async {
-    try {
-      final res = await InternetAddress.lookup('example.com');
-      return res.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
   }
 
   //-------------------------------------UI-------------------------------------
@@ -787,5 +714,17 @@ class _AddBudgetState extends State<AddBudget> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _cashAmountController.dispose();
+
+    for (var b in _bankInputs) {
+      b['bank'].dispose();
+      b['amount'].dispose();
+    }
+
+    super.dispose();
   }
 }

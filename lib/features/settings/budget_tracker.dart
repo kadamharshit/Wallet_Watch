@@ -77,7 +77,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     if (user == null) return;
 
     final allBudgets = await DatabaseHelper.instance.getBudget(user.id);
-
+    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
     final months =
         allBudgets
             .map((b) => (b['date'] ?? '').toString().substring(0, 7))
@@ -103,6 +103,18 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       } else {
         online += amount;
       }
+    }
+    for (final t in transfers) {
+      final date = (t['date'] ?? '').toString();
+      if (!date.startsWith(month)) continue;
+      final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+      final from = (t['from_type'] ?? '').toString().toLowerCase();
+      final to = (t['to_type'] ?? '').toString().toLowerCase();
+      if (from == 'cash') cash -= amount;
+      if (to == 'cash') cash += amount;
+
+      if (from == 'online') online -= amount;
+      if (to == 'online') online += amount;
     }
 
     setState(() {

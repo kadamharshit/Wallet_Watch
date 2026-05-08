@@ -4,6 +4,7 @@ import 'package:showcaseview/showcaseview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:walletwatch/features/settings/feedback_page.dart';
+import 'package:walletwatch/features/settings/transfer_tracker.dart';
 
 import 'package:walletwatch/providers/theme_provider.dart';
 import 'package:walletwatch/theme/app_theme.dart';
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
         '/add_expense': (_) => const AddManualExpense(),
         "/export_report": (context) => const ExportReportPage(),
         '/feedback': (context) => const FeedbackPage(),
+        '/transfer': (_) => const TransferTracker(),
       },
     );
   }

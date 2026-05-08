@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -59,14 +59,21 @@ class DatabaseHelper {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       uuid TEXT UNIQUE,
       user_id TEXT,
+      supabase_id INTEGER,
       from_type TEXT,
       to_type TEXT,
       from_bank TEXT,
       to_bank TEXT,
       amount REAL,
-      date TEXT
+      date TEXT,
+      synced INTEGER DEFAULT 0
     )
   ''');
+        }
+        if (oldVersion < 8) {
+          await db.execute(
+            'ALTER TABLE transfers ADD COLUMN supabase_id INTEGER',
+          );
         }
       },
     );
@@ -99,7 +106,8 @@ CREATE TABLE transfers (
   from_bank TEXT,
   to_bank TEXT,
   amount REAL,
-  date TEXT
+  date TEXT,
+  synced INTEGER DEFAULT 0
  
 )
 ''');
@@ -267,7 +275,13 @@ CREATE TABLE IF NOT EXISTS user_profile (
       await db.rawQuery('SELECT COUNT(*) FROM budget'),
     );
 
-    return (expCount ?? 0) == 0 && (budgetCount ?? 0) == 0;
+    final transferCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM transfers'),
+    );
+
+    return (expCount ?? 0) == 0 &&
+        (budgetCount ?? 0) == 0 &&
+        (transferCount ?? 0) == 0;
   }
 
   Future<void> updateBudget(int id, Map<String, dynamic> values) async {
@@ -284,6 +298,7 @@ CREATE TABLE IF NOT EXISTS user_profile (
     final db = await database;
     await db.delete('expenses');
     await db.delete('budget');
+    await db.delete('transfers');
   }
 
   //---------------- Recent Travel Expense ----------------------
@@ -357,7 +372,11 @@ CREATE TABLE IF NOT EXISTS user_profile (
   //----------------TRANSFERS------------------------------
   Future<int> insertTransfer(Map<String, dynamic> transfer) async {
     final db = await database;
-    return await db.insert('transfers', transfer);
+    return await db.insert(
+      'transfers',
+      transfer,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getTransfers(String userId) async {
@@ -369,5 +388,20 @@ CREATE TABLE IF NOT EXISTS user_profile (
       whereArgs: [userId],
       orderBy: 'date DESC',
     );
+  }
+
+  Future<List<Map<String, dynamic>>> getUnsyncedTransfers(String userId) async {
+    final db = await database;
+    return await db.query(
+      'transfers',
+      where: 'synced = ? AND user_id = ?',
+      whereArgs: [0, userId],
+    );
+  }
+
+  Future<void> updateTransfer(int id, Map<String, dynamic> values) async {
+    final db = await database;
+
+    await db.update('transfers', values, where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:walletwatch/services/expense_database.dart';
+import 'package:walletwatch/services/sync_service.dart';
 
 enum TransferType { cashToOnline, onlineToCash, bankToBank }
 
@@ -31,55 +32,131 @@ class _TransferScreenState extends State<TransferScreen> {
   List<String> banks = [];
   bool get hasMultipleBanks => banks.length > 1;
 
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBanks();
+    amountController.addListener(_onAmountChanged);
+  }
+
+  Future<void> _loadBanks() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final userBanks = await DatabaseHelper.instance.getUserBanks(user.id);
+
+    setState(() {
+      banks = userBanks;
+    });
+  }
+
+  void _onAmountChanged() {
+    setState(() {});
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _handleTransfer() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
 
-    final amount = double.tryParse(amountController.text) ?? 0;
-    double available = 0;
-    if (fromType!.toLowerCase() == 'cash') {
-      available = widget.cashBalance;
-    } else {
-      available = widget.onlineBalance;
+      final transferUuid = const Uuid().v4();
+      final now = DateTime.now().toString();
+
+      final amount = double.tryParse(amountController.text) ?? 0;
+      double available = 0;
+      if (fromType == null || toType == null) {
+        _showError("Select transfer type");
+        return;
+      }
+      if (selectedTransferType == TransferType.bankToBank) {
+        _showError("Bank transfer balance tracking coming soon");
+        return;
+      }
+      if (fromType!.toLowerCase() == 'cash') {
+        available = widget.cashBalance;
+      } else {
+        available = widget.onlineBalance;
+      }
+
+      if (amount > available) {
+        _showError("Insufficient Balance");
+        return;
+      }
+
+      // VALIDATIONS
+      if (fromType == null || toType == null) {
+        _showError("Select both From and To");
+        return;
+      }
+
+      if (fromType == toType) {
+        _showError("Cannot transfer to same account");
+        return;
+      }
+
+      if (amount <= 0) {
+        _showError("Enter valid amount");
+        return;
+      }
+
+      setState(() {
+        isLoading = true;
+      });
+
+      await DatabaseHelper.instance.insertTransfer({
+        'uuid': transferUuid,
+        'user_id': user.id,
+        'from_type': selectedTransferType == TransferType.cashToOnline
+            ? 'cash'
+            : selectedTransferType == TransferType.onlineToCash
+            ? 'online'
+            : 'bank',
+
+        'to_type': selectedTransferType == TransferType.cashToOnline
+            ? 'online'
+            : selectedTransferType == TransferType.onlineToCash
+            ? 'cash'
+            : 'bank',
+
+        'from_bank': selectedTransferType == TransferType.bankToBank
+            ? fromType
+            : null,
+
+        'to_bank': selectedTransferType == TransferType.bankToBank
+            ? toType
+            : null,
+        'amount': amount,
+        'date': now,
+        'synced': 0,
+        'supabase_id': null,
+      });
+
+      await SyncService.syncAll();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Transfer saved successfully")),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint("Transfer Error: $e");
+      if (mounted) {
+        _showError("Transfer Failed");
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
-
-    if (amount > available) {
-      _showError("Insufficient Balance");
-      return;
-    }
-
-    // VALIDATIONS
-    if (fromType == null || toType == null) {
-      _showError("Select both From and To");
-      return;
-    }
-
-    if (fromType == toType) {
-      _showError("Cannot transfer to same account");
-      return;
-    }
-
-    if (amount <= 0) {
-      _showError("Enter valid amount");
-      return;
-    }
-
-    await DatabaseHelper.instance.insertTransfer({
-      'uuid': const Uuid().v4(),
-      'user_id': user.id,
-      'from_type': fromType!.toLowerCase(),
-      'to_type': toType!.toLowerCase(),
-      'amount': amount,
-      'date': DateTime.now().toString(),
-    });
-
-    if (!mounted) return;
-
-    Navigator.pop(context, true); // IMPORTANT
   }
 
   Widget _transferCard({
@@ -125,6 +202,157 @@ class _TransferScreenState extends State<TransferScreen> {
         ),
       ),
     );
+  }
+
+  Widget _cashToOnlineUI() {
+    return Column(
+      children: [
+        Text(
+          "Available Cash: ₹${widget.cashBalance}",
+          style: TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.currency_rupee),
+            hintText: "Enter Amount",
+          ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : amountController.text.trim().isNotEmpty
+              ? _handleTransfer
+              : null,
+          child: isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Transfer"),
+        ),
+      ],
+    );
+  }
+
+  Widget _onlineToCashUI() {
+    return Column(
+      children: [
+        Text(
+          "Available Online: ₹${widget.onlineBalance}",
+          style: TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.currency_rupee),
+            hintText: "Enter Amount",
+          ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : amountController.text.trim().isNotEmpty
+              ? _handleTransfer
+              : null,
+          child: isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Transfer"),
+        ),
+      ],
+    );
+  }
+
+  Widget _bankToBankUI() {
+    final filteredBanks = banks.where((b) => b != fromType).toList();
+    return Column(
+      children: [
+        const Text("Select Banks"),
+
+        const SizedBox(height: 10),
+
+        DropdownButtonFormField(
+          hint: Text("From Bank"),
+
+          items: banks.map((b) {
+            return DropdownMenuItem(value: b, child: Text(b));
+          }).toList(),
+          onChanged: (val) {
+            setState(() {
+              fromType = val;
+            });
+          },
+        ),
+
+        const SizedBox(height: 10),
+
+        DropdownButtonFormField(
+          hint: Text("To Bank"),
+          items: filteredBanks.map((b) {
+            return DropdownMenuItem(value: b, child: Text(b));
+          }).toList(),
+          onChanged: (val) {
+            setState(() {
+              toType = val;
+            });
+          },
+        ),
+
+        const SizedBox(height: 10),
+
+        TextFormField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.currency_rupee),
+            hintText: "Enter amount",
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        ElevatedButton(
+          onPressed: isLoading
+              ? null
+              : amountController.text.trim().isNotEmpty
+              ? _handleTransfer
+              : null,
+          child: isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Transfer"),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDynamicSection() {
+    switch (selectedTransferType) {
+      case TransferType.cashToOnline:
+        return _cashToOnlineUI();
+
+      case TransferType.onlineToCash:
+        return _onlineToCashUI();
+
+      case TransferType.bankToBank:
+        return _bankToBankUI();
+      default:
+        return SizedBox();
+    }
   }
 
   @override
@@ -189,7 +417,7 @@ class _TransferScreenState extends State<TransferScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _transferCard(
-                      title: "Cash -> Online",
+                      title: "Cash → Online",
                       onTap: () {
                         setState(() {
                           selectedTransferType = TransferType.cashToOnline;
@@ -207,7 +435,7 @@ class _TransferScreenState extends State<TransferScreen> {
                     ),
                     const SizedBox(height: 10),
                     _transferCard(
-                      title: "Online -> Cash",
+                      title: "Online → Cash",
                       onTap: () {
                         setState(() {
                           selectedTransferType = TransferType.onlineToCash;
@@ -225,7 +453,7 @@ class _TransferScreenState extends State<TransferScreen> {
                     ),
                     const SizedBox(height: 10),
                     _transferCard(
-                      title: "Bank -> Bank",
+                      title: "Bank → Bank",
                       onTap: () {
                         setState(() {
                           selectedTransferType = TransferType.bankToBank;
@@ -242,21 +470,7 @@ class _TransferScreenState extends State<TransferScreen> {
                           selectedTransferType == TransferType.bankToBank,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: amountController,
-                      keyboardType: TextInputType.numberWithOptions(),
-                      decoration: InputDecoration(
-                        prefixIcon: Icon(Icons.currency_rupee_rounded),
-                        hint: Text("Enter Amount"),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    ElevatedButton(
-                      onPressed: _handleTransfer,
-                      child: const Text("Transfer"),
-                    ),
+                    _buildDynamicSection(),
                   ],
                 ),
               ),
@@ -308,5 +522,12 @@ class _TransferScreenState extends State<TransferScreen> {
       //   ),
       // ),
     );
+  }
+
+  @override
+  void dispose() {
+    amountController.removeListener(_onAmountChanged);
+    amountController.dispose();
+    super.dispose();
   }
 }

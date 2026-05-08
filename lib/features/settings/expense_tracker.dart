@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -20,10 +19,11 @@ class ExpenseTracker extends StatefulWidget {
 class _ExpenseTrackerState extends State<ExpenseTracker> {
   final supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> _expenses = [];
   //bool _isLoading = true;
   bool _hasLoadedLocal = false;
   //bool _isOnline = false;
+
+  List<Map<String, dynamic>> _expenses = [];
 
   String _filterMode = 'All';
   String _selectedCatgeory = 'All';
@@ -75,16 +75,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     await _secureStorage.write(key: _expenseTrackerTourDoneKey, value: "true");
   }
 
-  //------------------------------------Function to Check Internet Connection-----------------------------------
-  Future<bool> _checkConnection() async {
-    try {
-      final result = await InternetAddress.lookup('example.com');
-      return result.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
   //--------------------------------------HELPER----------------------------------
   Future<void> _refreshExpenses() async {
     await _loadExpenses();
@@ -122,76 +112,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     });
 
     // STEP 2: Sync in background (DO NOT await)
-    _syncExpensesInBackground();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startExpenseTrackerTourOnlyOnce();
     });
-  }
-
-  //-----------------------------------Function to sync Expenses from Supabase------------------------------
-  Future<void> _syncExpensesInBackground() async {
-    final isOnline = await _checkConnection();
-    final user = supabase.auth.currentUser;
-
-    if (!isOnline || user == null) return;
-
-    try {
-      // Sync local unsynced expenses
-      await _syncLocalToSupabase();
-
-      // Fetch latest from Supabase
-      final response = await supabase
-          .from('expenses')
-          .select()
-          .eq('user_id', user.id)
-          .order('date', ascending: false);
-
-      final serverExpenses = List<Map<String, dynamic>>.from(response);
-
-      for (final exp in serverExpenses) {
-        await DatabaseHelper.instance.upsertExpenseByUuid({
-          'uuid': exp['uuid'],
-          'user_id': user.id,
-          'supabase_id': exp['id'],
-          'date': exp['date'],
-          'shop': exp['shop'] ?? '',
-          'category': exp['category'] ?? '',
-          'items': exp['items'] ?? '',
-          'total': exp['total'] ?? 0,
-          'mode': exp['mode'] ?? 'Cash',
-          'bank': exp['bank'] ?? '',
-          'synced': 1,
-        });
-      }
-
-      // Reload updated data silently
-      final updatedExpenses = await DatabaseHelper.instance.getExpenses(
-        user.id,
-      );
-
-      if (!mounted) return;
-
-      if (mounted && !_listEqualsByUuid(_expenses, updatedExpenses)) {
-        setState(() {
-          _expenses = updatedExpenses;
-          _buildAvailableMonths(_expenses);
-        });
-      }
-    } catch (e) {}
-  }
-
-  bool _listEqualsByUuid(
-    List<Map<String, dynamic>> a,
-    List<Map<String, dynamic>> b,
-  ) {
-    if (a.length != b.length) return false;
-
-    for (int i = 0; i < a.length; i++) {
-      if (a[i]['uuid'] != b[i]['uuid']) return false;
-    }
-
-    return true;
   }
 
   // -----------------Shimmer effect---------------------
@@ -481,38 +405,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
   }
 
   //------------------------Function to Sync SQLite to Supabase--------------------------------
-  Future<void> _syncLocalToSupabase() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses(user.id);
-
-    for (final exp in unsynced) {
-      try {
-        final response = await supabase
-            .from('expenses')
-            .insert({
-              'uuid': exp['uuid'],
-              'user_id': user.id,
-              'date': exp['date'],
-              'shop': exp['shop'],
-              'category': exp['category'],
-              'items': exp['items'],
-              'total': exp['total'],
-              'mode': exp['mode'],
-              'bank': exp['bank'],
-              'created_at': DateTime.now().toIso8601String(),
-            })
-            .select('id')
-            .single();
-
-        await DatabaseHelper.instance.updateExpense(exp['id'], {
-          'supabase_id': response['id'],
-          'synced': 1,
-        });
-      } catch (e) {}
-    }
-  }
 
   String _formatDate(String date) {
     final parsed = DateTime.tryParse(date);

@@ -1,4 +1,4 @@
-//import 'dart:convert';
+import 'package:walletwatch/services/sync_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -117,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isEmpty) {
       await _syncFromSupabase(user.id); // ADD THIS
     }
+    await SyncService.syncAll();
     await _loadUserInfo();
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
@@ -141,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
   //-------------------------Function to sync supabase to sqlite---------------------------
   Future<void> _syncFromSupabase(String userId) async {
     try {
-      // 🔹 Fetch budgets
+      // Fetch budgets
       final budgets = await supabase
           .from('budgets')
           .select()
@@ -161,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      // 🔹 Fetch expenses
+      //  Fetch expenses
       final expenses = await supabase
           .from('expenses')
           .select()
@@ -180,6 +181,25 @@ class _HomeScreenState extends State<HomeScreen> {
           'bank': e['bank'],
           'synced': 1,
           'supabase_id': e['id'],
+        });
+      }
+      final transfers = await supabase
+          .from('transfers')
+          .select()
+          .eq('user_id', userId);
+
+      for (final t in transfers) {
+        await DatabaseHelper.instance.insertTransfer({
+          'uuid': t['uuid'],
+          'user_id': t['user_id'],
+          'from_type': t['from_type'],
+          'to_type': t['to_type'],
+          'from_bank': t['from_bank'],
+          'to_bank': t['to_bank'],
+          'amount': t['amount'],
+          'date': t['date'],
+          'synced': 1,
+          'supabase_id': t['id'],
         });
       }
     } catch (e) {
@@ -1066,6 +1086,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+            _drawerItem(Icons.sync_alt, "Transfer Tracker", "/transfer"),
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
             _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
