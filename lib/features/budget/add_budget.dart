@@ -29,7 +29,6 @@ class _AddBudgetState extends State<AddBudget> {
 
   static const String _addBudgetOnlineTourDoneKey =
       "walletwatch_add_budget_online_tour_done";
-  bool carryForward = true;
 
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
@@ -201,7 +200,6 @@ class _AddBudgetState extends State<AddBudget> {
           'bank': '',
           'synced': 0,
           'supabase_id': null,
-          'carry_forward': carryForward ? 1 : 0,
         });
 
         saved = true;
@@ -229,7 +227,6 @@ class _AddBudgetState extends State<AddBudget> {
             'bank': bankName,
             'synced': 0,
             'supabase_id': null,
-            'carry_forward': carryForward ? 1 : 0,
           });
 
           saved = true;

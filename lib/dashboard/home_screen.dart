@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:uuid/uuid.dart';
+
 import 'package:walletwatch/features/budget/transfer_screen.dart';
 
 import 'package:walletwatch/services/expense_database.dart';
@@ -52,8 +52,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final supabase = Supabase.instance.client;
 
-  bool _monthHandled = false;
-
   // ---------------- Derived Values ----------------
   double get _cashRemaining =>
       _cashBudget - _cashExpense + _cashTransferAdjustment;
@@ -84,35 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initHome();
     _loadVisibility();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndHandleNewMonth();
-    });
-  }
-
-  Future<void> _checkAndHandleNewMonth() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final budgets = await DatabaseHelper.instance.getBudget(user.id);
-    if (_monthHandled) return;
-
-    if (budgets.isEmpty) return;
-
-    final lastBudget = budgets.last;
-
-    final hasCurrentMonth = budgets.any((b) => isSameMonth(b['date']));
-
-    if (hasCurrentMonth) return;
-
-    if (isNewMonth(lastBudget['date'])) {
-      _monthHandled = true;
-
-      if (lastBudget['carry_forward'] == 1) {
-        await _carryForwardBudget(lastBudget);
-      } else {
-        _handleNewMonth(lastBudget);
-      }
-    }
   }
 
   Future<void> _initHome() async {
@@ -166,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
           'bank': b['bank'] ?? '',
           'synced': 1,
           'supabase_id': b['id'],
-          'carry_forward': 1, // fallback
         });
       }
 
@@ -283,72 +251,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   //-----------------------------------Helper---------------------------------------
-  bool isNewMonth(String lastDate) {
-    final last = DateTime.parse(lastDate);
-    final now = DateTime.now();
-
-    return last.month != now.month || last.year != now.year;
-  }
-
-  bool isSameMonth(String date) {
-    final d = DateTime.parse(date);
-    final now = DateTime.now();
-    return d.month == now.month && d.year == now.year;
-  }
 
   String hideAmount(String amount) {
     return _isAmountVisible ? amount : "₹ ••••";
-  }
-
-  //--------------------------------Function to Carry Forward--------------------------------
-  Future<void> _carryForwardBudget(Map lastBudget) async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final budgets = await DatabaseHelper.instance.getBudget(user.id);
-
-    final last = DateTime.parse(lastBudget['date']);
-
-    final lastMonthBudgets = budgets.where((b) {
-      final d = DateTime.parse(b['date']);
-      return d.month == last.month && d.year == last.year;
-    }).toList();
-
-    for (final b in lastMonthBudgets) {
-      await DatabaseHelper.instance.insertBudget({
-        'uuid': const Uuid().v4(),
-        'user_id': user.id,
-        'date': DateTime.now().toString(),
-        'mode': b['mode'],
-        'total': b['total'],
-        'bank': b['bank'],
-        'synced': 0,
-        'supabase_id': null,
-        'carry_forward': b['carry_forward'] ?? 1,
-      });
-    }
-
-    await _loadBudgetsSeparately();
-  }
-
-  //-------------------------Function to Reset Budget------------------------------
-  Future<void> _resetBudget() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    await DatabaseHelper.instance.insertBudget({
-      'uuid': const Uuid().v4(),
-      'user_id': user.id,
-      'date': DateTime.now().toString(),
-      'mode': 'Cash',
-      'total': 0,
-      'bank': '',
-      'synced': 0,
-      'supabase_id': null,
-      'carry_forward': 0,
-    });
-
-    await _loadBudgetsSeparately();
   }
 
   //--------------------------------Function to Load Expenses from Supabase----------------------
@@ -602,106 +507,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   //----------------------------------UI---------------------
-
-  void _handleNewMonth(Map lastBudget) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: colorScheme.surface,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              //  Icon
-              Container(
-                height: 50,
-                width: 50,
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(Icons.calendar_month, color: colorScheme.primary),
-              ),
-
-              const SizedBox(height: 14),
-
-              // Title
-              Text(
-                "New Month Started",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Content
-              Text(
-                "Do you want to carry forward last month's budget or reset it?",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 14,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Buttons
-              Row(
-                children: [
-                  // Reset Button
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _resetBudget();
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colorScheme.error,
-                        side: BorderSide(color: colorScheme.error),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text("Reset"),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Carry Forward Button
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _carryForwardBudget(lastBudget);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colorScheme.primary,
-                        foregroundColor: colorScheme.onPrimary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text("Carry Forward"),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

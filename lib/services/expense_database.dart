@@ -41,17 +41,14 @@ class DatabaseHelper {
 
         if (oldVersion < 6) {
           await db.execute('''
-        CREATE TABLE IF NOT EXISTS user_profile (
-          user_id TEXT PRIMARY KEY,
-          name TEXT,
-          email TEXT,
-          mobile TEXT,
-          dob TEXT
-        )
-      ''');
-          await db.execute(
-            "ALTER TABLE budget ADD COLUMN carry_forward INTEGER DEFAULT 1",
-          );
+CREATE TABLE IF NOT EXISTS user_profile (
+  user_id TEXT PRIMARY KEY,
+  name TEXT,
+  email TEXT,
+  mobile TEXT,
+  dob TEXT
+)
+''');
         }
         if (oldVersion < 7) {
           await db.execute('''
@@ -101,6 +98,7 @@ CREATE TABLE transfers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uuid TEXT UNIQUE,
   user_id TEXT,
+  supabase_id INTEGER,
   from_type TEXT,
   to_type TEXT,
   from_bank TEXT,
@@ -121,8 +119,7 @@ CREATE TABLE budget (
   total REAL,
   mode TEXT,
   bank TEXT,
-  synced INTEGER DEFAULT 0,
-  carry_forward INTEGER DEFAULT 1 
+  synced INTEGER DEFAULT 0
  
 )
 ''');
@@ -217,7 +214,6 @@ CREATE TABLE IF NOT EXISTS user_profile (
   Future<int> insertBudget(Map<String, dynamic> budget) async {
     final db = await database;
 
-    budget['carry_forward'] = budget['carry_forward'] ?? 1;
     return await db.insert(
       'budget',
       budget,
