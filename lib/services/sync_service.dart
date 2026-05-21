@@ -95,25 +95,42 @@ class SyncService {
 
     for (final t in unsyncedTransfers) {
       try {
-        final response = await supabase
-            .from('transfers')
-            .insert({
-              'uuid': t['uuid'],
-              'user_id': t['user_id'],
-              'from_type': t['from_type'],
-              'to_type': t['to_type'],
-              'from_bank': t['from_bank'],
-              'to_bank': t['to_bank'],
-              'amount': t['amount'],
-              'date': t['date'],
-            })
-            .select('id')
-            .single();
+        if (t['supabase_id'] != null) {
+          // UPDATE existing transfer
+          await supabase
+              .from('transfers')
+              .update({
+                'from_type': t['from_type'],
+                'to_type': t['to_type'],
+                'from_bank': t['from_bank'],
+                'to_bank': t['to_bank'],
+                'amount': t['amount'],
+              })
+              .eq('id', t['supabase_id']);
 
-        await DatabaseHelper.instance.updateTransfer(t['id'], {
-          'synced': 1,
-          'supabase_id': response['id'],
-        });
+          await DatabaseHelper.instance.updateTransfer(t['id'], {'synced': 1});
+        } else {
+          // INSERT new transfer
+          final response = await supabase
+              .from('transfers')
+              .insert({
+                'uuid': t['uuid'],
+                'user_id': t['user_id'],
+                'from_type': t['from_type'],
+                'to_type': t['to_type'],
+                'from_bank': t['from_bank'],
+                'to_bank': t['to_bank'],
+                'amount': t['amount'],
+                'date': t['date'],
+              })
+              .select('id')
+              .single();
+
+          await DatabaseHelper.instance.updateTransfer(t['id'], {
+            'synced': 1,
+            'supabase_id': response['id'],
+          });
+        }
       } catch (e) {
         debugPrint("Transfer Sync Error: $e");
       }

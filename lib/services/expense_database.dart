@@ -404,4 +404,9 @@ CREATE TABLE IF NOT EXISTS user_profile (
 
     await db.update('transfers', values, where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<void> deleteTransfer(int id) async {
+    final db = await database;
+    await db.delete('transfers', where: 'id = ?', whereArgs: [id]);
+  }
 }

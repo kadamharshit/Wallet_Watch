@@ -1,12 +1,18 @@
-import 'package:excel/excel.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:walletwatch/features/budget/transfer_screen.dart';
 import 'package:walletwatch/services/expense_database.dart';
+import 'package:walletwatch/widgets/tracker_widgets.dart';
 
 class TransferTracker extends StatefulWidget {
-  const TransferTracker({super.key});
+  final double cashBalance;
+  final double onlineBalance;
+  const TransferTracker({
+    super.key,
+    required this.cashBalance,
+    required this.onlineBalance,
+  });
 
   @override
   State<TransferTracker> createState() => _TransferTrackerState();
@@ -88,15 +94,97 @@ class _TransferTrackerState extends State<TransferTracker> {
       if (_filterMode == 'Online → Cash') {
         return from == 'online' && to == 'cash';
       }
-      if (_filterMode == 'Bank → Bank') {
-        return from == 'bank' && to == 'bank';
+      if (_filterMode == 'Online → Online') {
+        return from == 'online' &&
+            to == 'online' &&
+            (t['from_bank'] ?? '').toString().isNotEmpty &&
+            (t['to_bank'] ?? '').toString().isNotEmpty;
       }
 
       return true;
     }).toList();
   }
 
+  Map<String, List<Map<String, dynamic>>> get _groupedTransfers {
+    final map = <String, List<Map<String, dynamic>>>{};
+
+    for (final t in _filteredTransfers) {
+      final date = (t['date'] ?? '').toString().split(' ').first;
+      map.putIfAbsent(date, () => []).add(t);
+    }
+
+    final keys = map.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return {for (final k in keys) k: map[k]!};
+  }
+
+  String _formatDate(String date) {
+    final parsed = DateTime.tryParse(date);
+
+    if (parsed == null) return date;
+
+    final diff = DateTime.now().difference(parsed).inDays;
+
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+
+    return DateFormat('dd MMM yyyy').format(parsed);
+  }
+
   Future<void> _refreshTransfers() async {
+    await _loadTransfersForMonth(_selectedMonth);
+  }
+
+  double get _cashToOnlineTotal {
+    return _filteredTransfers
+        .where(
+          (t) =>
+              (t['from_type'] ?? '').toString().toLowerCase() == 'cash' &&
+              (t['to_type'] ?? '').toString().toLowerCase() == 'online',
+        )
+        .fold(0.0, (sum, t) => sum + ((t['amount'] as num?)?.toDouble() ?? 0));
+  }
+
+  double get _onlineToCashTotal {
+    return _filteredTransfers
+        .where(
+          (t) =>
+              (t['from_type'] ?? '').toString().toLowerCase() == 'online' &&
+              (t['to_type'] ?? '').toString().toLowerCase() == 'cash',
+        )
+        .fold(0.0, (sum, t) => sum + ((t['amount'] as num?)?.toDouble() ?? 0));
+  }
+
+  double get _onlineToOnlineTotal {
+    return _filteredTransfers
+        .where(
+          (t) =>
+              (t['from_type'] ?? '').toString().toLowerCase() == 'online' &&
+              (t['to_type'] ?? '').toString().toLowerCase() == 'online',
+        )
+        .fold(0.0, (sum, t) => sum + ((t['amount'] as num?)?.toDouble() ?? 0));
+  }
+
+  double get _grandTransferTotal {
+    return _cashToOnlineTotal + _onlineToCashTotal + _onlineToOnlineTotal;
+  }
+
+  Future<void> _deleteTransfer(Map<String, dynamic> trf) async {
+    final localId = trf['id'];
+    final supabaseId = trf['supabase_id'];
+    final uuid = trf['uuid'];
+
+    await DatabaseHelper.instance.deleteTransfer(localId);
+
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      if (supabaseId != null) {
+        await supabase.from('transfers').delete().eq('id', supabaseId);
+      } else if (uuid != null) {
+        await supabase.from('transfers').delete().eq('uuid', uuid);
+      }
+    }
+
     await _loadTransfersForMonth(_selectedMonth);
   }
 
@@ -152,38 +240,147 @@ class _TransferTrackerState extends State<TransferTracker> {
     );
   }
 
-  Widget _sectionContainer({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        //border: Border.all(color: colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+  Future<bool> _confirmDeleteDialog() async {
+    final result = await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Delete Transfer?"),
+        content: const Text(
+          "Are you sure you want to delete this transfer? This action cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colorScheme.error,
+              foregroundColor: colorScheme.surface,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
           ),
         ],
       ),
-      child: child,
     );
+
+    return result ?? false;
   }
 
-  InputDecoration _pillDecoration({
-    required String hint,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: colorScheme.surfaceVariant.withOpacity(0.4),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(30),
-        borderSide: BorderSide.none,
+  Widget _buildSummarySection() {
+    return buildSectionContainer(
+      context: context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Transfer Summary",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+
+          const SizedBox(height: 10),
+
+          Text(
+            "₹${_grandTransferTotal.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.primary,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondary.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Cash → Online",
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "₹${_cashToOnlineTotal.toStringAsFixed(2)}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Online → Cash",
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "₹${_onlineToCashTotal.toStringAsFixed(2)}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.tertiary.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Online → Online",
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "₹${_onlineToOnlineTotal.toStringAsFixed(2)}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.tertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -201,7 +398,7 @@ class _TransferTrackerState extends State<TransferTracker> {
 
     String title;
 
-    if (fromType == 'bank' && toType == 'bank') {
+    if (fromBank.isNotEmpty && toBank.isNotEmpty) {
       title = "$fromBank → $toBank";
     } else {
       title = "${fromType.toUpperCase()} → ${toType.toUpperCase()}";
@@ -278,25 +475,20 @@ class _TransferTrackerState extends State<TransferTracker> {
                 onRefresh: _refreshTransfers,
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _transfers.isEmpty
-                    ? Center(
-                        child: Text(
-                          "No transfers found",
-                          style: TextStyle(color: colorScheme.onSurfaceVariant),
-                        ),
-                      )
                     : ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.only(top: 6, bottom: 18),
                         children: [
-                          _sectionContainer(
+                          buildSectionContainer(
+                            context: context,
                             child: DropdownButtonFormField<String>(
                               value: _availableMonths.contains(_selectedMonth)
                                   ? _selectedMonth
                                   : (_availableMonths.isNotEmpty
                                         ? _availableMonths.first
                                         : null),
-                              decoration: _pillDecoration(
+                              decoration: buildPillDecoration(
+                                context: context,
                                 hint: "Select Month",
                                 icon: Icons.calendar_month,
                               ),
@@ -320,12 +512,15 @@ class _TransferTrackerState extends State<TransferTracker> {
                               },
                             ),
                           ),
-                          const SizedBox(height: 12),
 
-                          _sectionContainer(
+                          _buildSummarySection(),
+
+                          buildSectionContainer(
+                            context: context,
                             child: DropdownButtonFormField<String>(
                               value: _filterMode,
-                              decoration: _pillDecoration(
+                              decoration: buildPillDecoration(
+                                context: context,
                                 hint: "Filter",
                                 icon: Icons.filter_alt,
                               ),
@@ -343,8 +538,8 @@ class _TransferTrackerState extends State<TransferTracker> {
                                   child: Text('Online → Cash'),
                                 ),
                                 DropdownMenuItem(
-                                  value: 'Bank → Bank',
-                                  child: Text('Bank → Bank'),
+                                  value: 'Online → Online',
+                                  child: Text('Online → Online'),
                                 ),
                               ],
                               onChanged: (value) {
@@ -358,13 +553,180 @@ class _TransferTrackerState extends State<TransferTracker> {
                           ),
 
                           const SizedBox(height: 20),
-                          _sectionContainer(
-                            child: Column(
-                              children: _filteredTransfers
-                                  .map((t) => _buildTransferCard(t))
-                                  .toList(),
-                            ),
-                          ),
+                          if (_filteredTransfers.isEmpty)
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 40),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Icons.sync_alt,
+                                      size: 54,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "No transfers found",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "Try changing filter or month",
+                                      style: TextStyle(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            ..._groupedTransfers.entries.map((entry) {
+                              final dateTotal = entry.value.fold<double>(
+                                0,
+                                (sum, t) =>
+                                    sum +
+                                    ((t['amount'] as num?)?.toDouble() ?? 0),
+                              );
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      18,
+                                      14,
+                                      18,
+                                      4,
+                                    ),
+                                    child: Text(
+                                      "${_formatDate(entry.key)} • ₹${dateTotal.toStringAsFixed(2)}",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14.5,
+                                      ),
+                                    ),
+                                  ),
+
+                                  ...entry.value.map((t) {
+                                    return Dismissible(
+                                      key: ValueKey(t['uuid']),
+                                      direction: DismissDirection.horizontal,
+
+                                      background: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                        ),
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.only(
+                                          left: 18,
+                                        ),
+                                        child: Row(
+                                          children: const [
+                                            Icon(
+                                              Icons.edit,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Edit',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      secondaryBackground: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red,
+                                          borderRadius: BorderRadius.circular(
+                                            18,
+                                          ),
+                                        ),
+                                        alignment: Alignment.centerRight,
+                                        padding: const EdgeInsets.only(
+                                          right: 18,
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: const [
+                                            Text(
+                                              'Delete',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            SizedBox(width: 8),
+                                            Icon(
+                                              Icons.delete,
+                                              color: Colors.white,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      confirmDismiss: (direction) async {
+                                        if (direction ==
+                                            DismissDirection.startToEnd) {
+                                          final user =
+                                              supabase.auth.currentUser;
+
+                                          if (user == null) return false;
+
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => TransferScreen(
+                                                cashBalance: widget.cashBalance,
+                                                onlineBalance:
+                                                    widget.onlineBalance,
+                                                existingTransfer: t,
+                                              ),
+                                            ),
+                                          );
+
+                                          await _loadTransfersForMonth(
+                                            _selectedMonth,
+                                          );
+
+                                          return false;
+                                        }
+                                        final confirm =
+                                            await _confirmDeleteDialog();
+
+                                        if (confirm) {
+                                          await _deleteTransfer(t);
+                                        }
+
+                                        return confirm;
+                                      },
+
+                                      child: _buildTransferCard(t),
+                                    );
+                                  }),
+                                ],
+                              );
+                            }),
                         ],
                       ),
               ),

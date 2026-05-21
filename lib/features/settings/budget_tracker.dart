@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:walletwatch/widgets/tracker_widgets.dart';
 
 class BudgetTracker extends StatefulWidget {
   const BudgetTracker({super.key});
@@ -77,7 +78,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     if (user == null) return;
 
     final allBudgets = await DatabaseHelper.instance.getBudget(user.id);
-    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
+
     final months =
         allBudgets
             .map((b) => (b['date'] ?? '').toString().substring(0, 7))
@@ -98,23 +99,14 @@ class _BudgetTrackerState extends State<BudgetTracker> {
 
     for (final b in filtered) {
       final amount = (b['total'] as num?)?.toDouble() ?? 0;
-      if ((b['mode'] ?? '') == 'Cash') {
+      final mode = (b['mode'] ?? '').toString().trim().toLowerCase();
+
+      if (mode == 'cash') {
         cash += amount;
-      } else {
+      } else if (mode == 'online') {
         online += amount;
       }
-    }
-    for (final t in transfers) {
-      final date = (t['date'] ?? '').toString();
-      if (!date.startsWith(month)) continue;
-      final amount = (t['amount'] as num?)?.toDouble() ?? 0;
-      final from = (t['from_type'] ?? '').toString().toLowerCase();
-      final to = (t['to_type'] ?? '').toString().toLowerCase();
-      if (from == 'cash') cash -= amount;
-      if (to == 'cash') cash += amount;
-
-      if (from == 'online') online -= amount;
-      if (to == 'online') online += amount;
+      debugPrint("MODE:${b['mode']} AMOUNT:$amount");
     }
 
     setState(() {
@@ -135,72 +127,295 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     }).toList();
   }
 
+  Map<String, List<Map<String, dynamic>>> get _groupedByDate {
+    final map = <String, List<Map<String, dynamic>>>{};
+
+    for (final b in _filteredByMode) {
+      final date = (b['date'] ?? '').toString();
+      map.putIfAbsent(date, () => []).add(b);
+    }
+
+    final keys = map.keys.toList()..sort((a, b) => b.compareTo(a));
+    return {for (final k in keys) k: map[k]!};
+  }
+
   //--------------------------------UI and Logic for Edit Budget------------------------------------
   Future<void> _showEditDialog(Map<String, dynamic> entry) async {
+    bool isSaving = false;
+
+    final expenses = await DatabaseHelper.instance.getExpenses(
+      Supabase.instance.client.auth.currentUser!.id,
+    );
+
     final controller = TextEditingController(text: entry['total'].toString());
+
+    String selectedMode = entry['mode'] ?? 'Cash';
+
+    final bankController = TextEditingController(text: entry['bank'] ?? '');
+
+    List<String> availableBanks = [];
+
+    availableBanks = await DatabaseHelper.instance.getUserBanks(
+      Supabase.instance.client.auth.currentUser!.id,
+    );
+
+    double cashUsed = 0;
+    double onlineUsed = 0;
+
+    Map<String, double> onlineUsedByBank = {};
+
+    for (final e in expenses) {
+      final amount = (e['total'] as num?)?.toDouble() ?? 0;
+
+      if ((e['mode'] ?? '') == 'Cash') {
+        cashUsed += amount;
+      } else {
+        onlineUsed += amount;
+
+        final bank = (e['bank'] ?? '').toString();
+
+        onlineUsedByBank[bank] = (onlineUsedByBank[bank] ?? 0) + amount;
+      }
+    }
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Edit Budget"),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: "Amount"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final value = double.tryParse(controller.text);
-
-              if (value == null || value <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Enter valid amount")),
-                );
-                return;
-              }
-
-              if (value > MAX_LIMIT) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Max ₹2,00,000 allowed")),
-                );
-                return;
-              }
-
-              if (value > WARNING_LIMIT) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("High budget amount")),
-                );
-              }
-
-              await DatabaseHelper.instance.updateBudget(entry['id'], {
-                'total': value,
-              });
-
-              final supabaseId = entry['supabase_id'];
-              if (supabaseId != null) {
-                await Supabase.instance.client
-                    .from('budgets')
-                    .update({'total': value})
-                    .eq('id', supabaseId);
-              }
-
-              Navigator.pop(context);
-              _loadBudgetsForMonth(_selectedMonth);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.surface,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: const Text("Save"),
-          ),
-        ],
+            title: const Text("Edit Budget"),
+
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedMode,
+                  decoration: const InputDecoration(labelText: "Mode"),
+                  items: const [
+                    DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'Online', child: Text("Online")),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+
+                    setModalState(() {
+                      selectedMode = value;
+
+                      if (selectedMode == 'Cash') {
+                        bankController.clear();
+                      }
+                    });
+                  },
+                ),
+
+                const SizedBox(height: 14),
+
+                if (selectedMode == 'Online')
+                  DropdownButtonFormField<String>(
+                    value: availableBanks.contains(bankController.text)
+                        ? bankController.text
+                        : null,
+                    decoration: const InputDecoration(labelText: "Select Bank"),
+                    items: availableBanks
+                        .map(
+                          (bank) =>
+                              DropdownMenuItem(value: bank, child: Text(bank)),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+
+                      setModalState(() {
+                        bankController.text = value;
+                      });
+                    },
+                  ),
+
+                if (selectedMode == 'Online') const SizedBox(height: 14),
+
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Amount"),
+                ),
+              ],
+            ),
+
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        setModalState(() {
+                          isSaving = true;
+                        });
+
+                        try {
+                          final value = double.tryParse(controller.text);
+
+                          if (value == null || value <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Enter valid amount"),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (value > MAX_LIMIT) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Max ₹2,00,000 allowed"),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (selectedMode == 'Online' &&
+                              bankController.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Please select bank"),
+                              ),
+                            );
+                            return;
+                          }
+
+                          double otherCashBudgets = 0;
+                          double otherOnlineBudgets = 0;
+
+                          for (final b in _filteredBudgets) {
+                            if (b['id'] == entry['id']) continue;
+
+                            final amount =
+                                (b['total'] as num?)?.toDouble() ?? 0;
+
+                            if ((b['mode'] ?? '') == 'Cash') {
+                              otherCashBudgets += amount;
+                            } else {
+                              otherOnlineBudgets += amount;
+                            }
+                          }
+
+                          double newCashBudget = otherCashBudgets;
+
+                          double newOnlineBudget = otherOnlineBudgets;
+
+                          if (selectedMode == 'Cash') {
+                            newCashBudget += value;
+                          } else {
+                            newOnlineBudget += value;
+                          }
+
+                          // CASH VALIDATION
+                          if (newCashBudget < cashUsed) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Cash budget cannot be less than used cash expenses",
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // ONLINE VALIDATION
+                          if (newOnlineBudget < onlineUsed) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Online budget cannot be less than used online expenses",
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // BANK VALIDATION
+                          if (selectedMode == 'Online') {
+                            final usedForBank =
+                                onlineUsedByBank[bankController.text.trim()] ??
+                                0;
+
+                            if (value < usedForBank) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "${bankController.text} budget cannot be less than used expenses",
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                          }
+
+                          // SQLITE UPDATE
+                          await DatabaseHelper.instance
+                              .updateBudget(entry['id'], {
+                                'mode': selectedMode,
+                                'bank': selectedMode == 'Online'
+                                    ? bankController.text.trim()
+                                    : '',
+                                'total': value,
+                                'synced': 0,
+                              });
+
+                          // SUPABASE UPDATE
+                          final supabaseId = entry['supabase_id'];
+
+                          if (supabaseId != null) {
+                            await Supabase.instance.client
+                                .from('budgets')
+                                .update({
+                                  'mode': selectedMode,
+                                  'bank': selectedMode == 'Online'
+                                      ? bankController.text.trim()
+                                      : '',
+                                  'total': value,
+                                })
+                                .eq('id', supabaseId);
+                          }
+
+                          if (mounted) {
+                            Navigator.pop(context);
+                            await _loadBudgetsForMonth(_selectedMonth);
+                          }
+                        } finally {
+                          if (context.mounted) {
+                            setModalState(() {
+                              isSaving = false;
+                            });
+                          }
+                        }
+                      },
+
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.surface,
+                ),
+
+                child: isSaving
+                    ? SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.surface,
+                        ),
+                      )
+                    : const Text("Save"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -299,42 +514,6 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     );
   }
 
-  Widget _sectionContainer({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  InputDecoration _pillDecoration({
-    required String hint,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: colorScheme.surfaceVariant.withOpacity(0.4),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(30),
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
-
   Widget _buildBudgetPieChart() {
     final total = _cashTotal + _onlineTotal;
 
@@ -414,7 +593,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "This Month's Budget",
+          "Budget Summary",
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const SizedBox(height: 10),
@@ -628,7 +807,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
 
     return DropdownButtonFormField<String>(
       value: safeValue,
-      decoration: _pillDecoration(
+      decoration: buildPillDecoration(
+        context: context,
         hint: "Mode",
         icon: Icons.account_balance_wallet,
       ),
@@ -664,14 +844,16 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                       key: _monthKey,
                       description:
                           "Select month to view budgets for that month",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: DropdownButtonFormField<String>(
                           value: _availableMonths.contains(_selectedMonth)
                               ? _selectedMonth
                               : (_availableMonths.isNotEmpty
                                     ? _availableMonths.first
                                     : null),
-                          decoration: _pillDecoration(
+                          decoration: buildPillDecoration(
+                            context: context,
                             hint: "Select Month",
                             icon: Icons.calendar_month,
                           ),
@@ -700,7 +882,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                       key: _chartKey,
                       description:
                           "This chart shows Cash vs Online budget split",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -723,13 +906,17 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                       key: _summaryKey,
                       description:
                           "This shows total budget, cash total & online total",
-                      child: _sectionContainer(child: _buildSummary()),
+                      child: buildSectionContainer(
+                        context: context,
+                        child: _buildSummary(),
+                      ),
                     ),
                     Showcase(
                       key: _filterKey,
                       description:
                           "Filter budget entries by mode: All / Cash / Online",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -754,7 +941,8 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                       description:
                           "Swipe cards to Edit or Delete budget entries",
                       child: list.isEmpty
-                          ? _sectionContainer(
+                          ? buildSectionContainer(
+                              context: context,
                               child: Column(
                                 children: [
                                   Container(
@@ -793,7 +981,28 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                               ),
                             )
                           : Column(
-                              children: list.map(_buildBudgetCard).toList(),
+                              children: _groupedByDate.entries.map((entry) {
+                                final dateTotal = entry.value.fold<double>(
+                                  0,
+                                  (sum, e) =>
+                                      sum +
+                                      ((e['total'] as num?)?.toDouble() ?? 0),
+                                );
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    buildDateHeader(
+                                      title:
+                                          "${entry.key} • ₹${dateTotal.toStringAsFixed(2)}",
+                                    ),
+
+                                    ...entry.value.map((e) {
+                                      return _buildBudgetCard(e);
+                                    }),
+                                  ],
+                                );
+                              }).toList(),
                             ),
                     ),
                   ],

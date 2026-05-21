@@ -8,6 +8,7 @@ import 'package:walletwatch/features/expense/edit_expense.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:walletwatch/widgets/tracker_widgets.dart';
 
 class ExpenseTracker extends StatefulWidget {
   const ExpenseTracker({super.key});
@@ -621,7 +622,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
     return DropdownButtonFormField<String>(
       value: safeValue,
-      decoration: _pillDecoration(
+      decoration: buildPillDecoration(
+        context: context,
         hint: "Mode",
         icon: Icons.account_balance_wallet,
       ),
@@ -643,7 +645,11 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
     return DropdownButtonFormField<String>(
       value: safeValue,
-      decoration: _pillDecoration(hint: "Category", icon: Icons.category),
+      decoration: buildPillDecoration(
+        context: context,
+        hint: "Category",
+        icon: Icons.category,
+      ),
       items: _categories
           .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
           .toList(),
@@ -781,44 +787,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
-  Widget _sectionContainer({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.4)
-                : Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  InputDecoration _pillDecoration({
-    required String hint,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(30),
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -839,12 +807,14 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                         key: _monthKey,
                         description:
                             "Select month to see expenses for that month",
-                        child: _sectionContainer(
+                        child: buildSectionContainer(
+                          context: context,
                           child: DropdownButtonFormField<String>(
                             value: _availableMonths.contains(_selectedMonth)
                                 ? _selectedMonth
                                 : null,
-                            decoration: _pillDecoration(
+                            decoration: buildPillDecoration(
+                              context: context,
                               hint: "Select Month",
                               icon: Icons.calendar_month,
                             ),
@@ -871,7 +841,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                     Showcase(
                       key: _chartKey,
                       description: "Shows Cash vs Online expense split",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -894,12 +865,13 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                       key: _summaryKey,
                       description:
                           "This shows total, cash and online spending for the month",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              "Summary",
+                              "Expense Summary",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -1006,7 +978,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                       child: !_hasLoadedLocal
                           ? _buildShimmerList() // or shimmer
                           : _filteredExpenses.isEmpty
-                          ? _sectionContainer(
+                          ? buildSectionContainer(
+                              context: context,
                               child: Column(
                                 children: [
                                   Container(

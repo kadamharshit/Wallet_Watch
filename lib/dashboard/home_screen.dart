@@ -1,3 +1,4 @@
+import 'package:walletwatch/features/settings/transfer_tracker.dart';
 import 'package:walletwatch/services/sync_service.dart';
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _useremail = '';
 
+  double _cashTransferAdjustment = 0;
+  double _onlineTransferAdjustment = 0;
+
   bool _isAmountVisible = false;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
@@ -51,8 +55,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _monthHandled = false;
 
   // ---------------- Derived Values ----------------
-  double get _cashRemaining => _cashBudget - _cashExpense;
-  double get _onlineRemaining => _onlineBudget - _onlineExpense;
+  double get _cashRemaining =>
+      _cashBudget - _cashExpense + _cashTransferAdjustment;
+
+  double get _onlineRemaining =>
+      _onlineBudget - _onlineExpense + _onlineTransferAdjustment;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
 
   double get _cashProgress =>
@@ -121,6 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadUserInfo();
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
+    await _loadTransferAdjustments();
     //await _loadShoppingList();
 
     if (!mounted) return;
@@ -378,6 +386,43 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _loadTransferAdjustments() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+
+    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
+
+    double cashAdj = 0;
+    double onlineAdj = 0;
+
+    for (final t in transfers) {
+      final date = (t['date'] ?? '').toString();
+
+      if (!date.startsWith(currentMonth)) continue;
+
+      final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+
+      final from = (t['from_type'] ?? '').toString().toLowerCase();
+
+      final to = (t['to_type'] ?? '').toString().toLowerCase();
+
+      if (from == 'cash') cashAdj -= amount;
+      if (to == 'cash') cashAdj += amount;
+
+      if (from == 'online') onlineAdj -= amount;
+      if (to == 'online') onlineAdj += amount;
+    }
+
+    setState(() {
+      _cashTransferAdjustment = cashAdj;
+      _onlineTransferAdjustment = onlineAdj;
+    });
+  }
+
   //----------------------Function to Load Budget from Supabase------------------
   Future<void> _loadBudgetsSeparately() async {
     final user = supabase.auth.currentUser;
@@ -387,7 +432,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
     final budgets = await DatabaseHelper.instance.getBudget(user.id);
-    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
 
     double cash = 0.0;
     double online = 0.0;
@@ -404,21 +448,6 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         cash += amount;
       }
-    }
-    for (final t in transfers) {
-      final date = (t['date'] ?? '').toString();
-      if (!date.startsWith(currentMonth)) continue;
-
-      final amount = (t['amount'] as num?)?.toDouble() ?? 0.0;
-
-      final from = (t['from_type'] ?? '').toString().toLowerCase();
-      final to = (t['to_type'] ?? '').toString().toLowerCase();
-
-      if (from == 'cash') cash -= amount;
-      if (to == 'cash') cash += amount;
-
-      if (from == 'online') online -= amount;
-      if (to == 'online') online += amount;
     }
 
     if (!mounted) return;
@@ -444,6 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshAll() async {
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
+    await _loadTransferAdjustments();
     //await _loadShoppingList();
   }
 
@@ -966,39 +996,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.sync_alt),
-                label: const Text(
-                  "Transfer",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary,
-                  foregroundColor: colorScheme.surface,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+            if (_cashBudget > 0 || _onlineBudget > 0) ...[
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.sync_alt),
+                  label: const Text(
+                    "Transfer",
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                ),
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TransferScreen(
-                        cashBalance: _cashRemaining,
-                        onlineBalance: _onlineRemaining,
-                      ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.surface,
+                    foregroundColor: colorScheme.primary,
+                    elevation: 0,
+                    side: BorderSide(color: colorScheme.primary, width: 1.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
                     ),
-                  );
-                  if (result == true) {
-                    await _loadBudgetsSeparately();
-                  }
-                },
+                  ),
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferScreen(
+                          cashBalance: _cashRemaining,
+                          onlineBalance: _onlineRemaining,
+                        ),
+                      ),
+                    );
+
+                    if (result == true) {
+                      await _refreshAll();
+                    }
+                  },
+                ),
               ),
-            ),
+            ],
 
             // ElevatedButton(
             //   onPressed: () async {
@@ -1118,9 +1154,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
-      onTap: () {
+      onTap: () async {
         Navigator.pop(context);
-        Navigator.pushNamed(context, route);
+
+        if (route == "/transfer") {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TransferTracker(
+                cashBalance: _cashRemaining,
+                onlineBalance: _onlineRemaining,
+              ),
+            ),
+          );
+
+          await _refreshAll();
+        } else {
+          Navigator.pushNamed(context, route);
+        }
       },
     );
   }
