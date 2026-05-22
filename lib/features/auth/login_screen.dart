@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = "No internet connection";
+        _errorMessage = e.toString();
       });
     } finally {
       if (mounted) {

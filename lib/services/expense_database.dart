@@ -67,11 +67,6 @@ CREATE TABLE IF NOT EXISTS user_profile (
     )
   ''');
         }
-        if (oldVersion < 8) {
-          await db.execute(
-            'ALTER TABLE transfers ADD COLUMN supabase_id INTEGER',
-          );
-        }
       },
     );
   }

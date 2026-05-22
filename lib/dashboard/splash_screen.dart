@@ -21,18 +21,15 @@ class _SplashScreenState extends State<SplashScreen> {
 
   //---------------------------Function to Check Session-----------------------------------
   Future<void> _checkSession() async {
-    final session = supabase.auth.currentSession;
+    await Future.delayed(const Duration(seconds: 2));
 
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final session = supabase.auth.currentSession;
 
     if (!mounted) return;
 
-    if (session != null &&
-        session.user != null &&
-        session.user!.emailConfirmedAt != null) {
+    if (session != null && session.user.emailConfirmedAt != null) {
       Navigator.pushReplacementNamed(context, '/home');
     } else {
-      await supabase.auth.signOut();
       Navigator.pushReplacementNamed(context, '/login');
     }
   }

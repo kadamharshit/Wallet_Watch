@@ -85,32 +85,41 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initHome() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
 
-    final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
+      final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
-    if (isEmpty) {
-      await _syncFromSupabase(user.id); // ADD THIS
-    }
-    await SyncService.syncAll();
-    await _loadUserInfo();
-    await _loadBudgetsSeparately();
-    await _loadExpensesSeparately();
-    await _loadTransferAdjustments();
-    //await _loadShoppingList();
+      if (isEmpty) {
+        await _syncFromSupabase(user.id);
+      }
 
-    if (!mounted) return;
+      await SyncService.syncAll();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(milliseconds: 500));
+      await _loadUserInfo();
+      await _loadBudgetsSeparately();
+      await _loadExpensesSeparately();
+      await _loadTransferAdjustments();
+
       if (!mounted) return;
-      _startTourIfFirstTime();
-    });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (!mounted) return;
+
+        _startTourIfFirstTime();
+      });
+    } catch (e) {
+      debugPrint("Home init error: $e");
+    }
   }
 
   Future<void> _loadVisibility() async {
     final value = await _secureStorage.read(key: 'amount_visible');
+
+    if (!mounted) return;
     setState(() {
       _isAmountVisible = value == "true";
     });
@@ -322,6 +331,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (to == 'online') onlineAdj += amount;
     }
 
+    if (!mounted) return;
     setState(() {
       _cashTransferAdjustment = cashAdj;
       _onlineTransferAdjustment = onlineAdj;
@@ -405,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (confirm == true) {
       try {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut(scope: SignOutScope.local);
 
         // Clear local cache AFTER signout
         await DatabaseHelper.instance.clearAllTables();
