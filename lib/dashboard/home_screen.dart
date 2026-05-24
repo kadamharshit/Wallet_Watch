@@ -1,4 +1,5 @@
-//import 'dart:convert';
+import 'package:walletwatch/features/settings/transfer_tracker.dart';
+import 'package:walletwatch/services/sync_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'package:walletwatch/features/budget/transfer_screen.dart';
 
 import 'package:walletwatch/services/expense_database.dart';
 
@@ -30,6 +33,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = '';
   String _useremail = '';
 
+  double _cashTransferAdjustment = 0;
+  double _onlineTransferAdjustment = 0;
+
+  bool _isAmountVisible = false;
+
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -45,8 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final supabase = Supabase.instance.client;
 
   // ---------------- Derived Values ----------------
-  double get _cashRemaining => _cashBudget - _cashExpense;
-  double get _onlineRemaining => _onlineBudget - _onlineExpense;
+  double get _cashRemaining =>
+      _cashBudget - _cashExpense + _cashTransferAdjustment;
+
+  double get _onlineRemaining =>
+      _onlineBudget - _onlineExpense + _onlineTransferAdjustment;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
 
   double get _cashProgress =>
@@ -70,21 +81,115 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initHome();
+    _loadVisibility();
   }
 
   Future<void> _initHome() async {
-    await _loadUserInfo();
-    await _loadBudgetsSeparately();
-    await _loadExpensesSeparately();
-    //await _loadShoppingList();
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
+
+      if (isEmpty) {
+        await _syncFromSupabase(user.id);
+      }
+
+      await SyncService.syncAll();
+
+      await _loadUserInfo();
+      await _loadBudgetsSeparately();
+      await _loadExpensesSeparately();
+      await _loadTransferAdjustments();
+
+      if (!mounted) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (!mounted) return;
+
+        _startTourIfFirstTime();
+      });
+    } catch (e) {
+      debugPrint("Home init error: $e");
+    }
+  }
+
+  Future<void> _loadVisibility() async {
+    final value = await _secureStorage.read(key: 'amount_visible');
 
     if (!mounted) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!mounted) return;
-      _startTourIfFirstTime();
+    setState(() {
+      _isAmountVisible = value == "true";
     });
+  }
+
+  //-------------------------Function to sync supabase to sqlite---------------------------
+  Future<void> _syncFromSupabase(String userId) async {
+    try {
+      // Fetch budgets
+      final budgets = await supabase
+          .from('budgets')
+          .select()
+          .eq('user_id', userId);
+
+      for (final b in budgets) {
+        await DatabaseHelper.instance.insertBudget({
+          'uuid': b['uuid'],
+          'user_id': userId,
+          'date': b['date'],
+          'mode': b['mode'],
+          'total': b['total'],
+          'bank': b['bank'] ?? '',
+          'synced': 1,
+          'supabase_id': b['id'],
+        });
+      }
+
+      //  Fetch expenses
+      final expenses = await supabase
+          .from('expenses')
+          .select()
+          .eq('user_id', userId);
+
+      for (final e in expenses) {
+        await DatabaseHelper.instance.insertExpense({
+          'uuid': e['uuid'],
+          'user_id': userId,
+          'date': e['date'],
+          'shop': e['shop'],
+          'category': e['category'],
+          'items': e['items'],
+          'total': e['total'],
+          'mode': e['mode'],
+          'bank': e['bank'],
+          'synced': 1,
+          'supabase_id': e['id'],
+        });
+      }
+      final transfers = await supabase
+          .from('transfers')
+          .select()
+          .eq('user_id', userId);
+
+      for (final t in transfers) {
+        await DatabaseHelper.instance.insertTransfer({
+          'uuid': t['uuid'],
+          'user_id': t['user_id'],
+          'from_type': t['from_type'],
+          'to_type': t['to_type'],
+          'from_bank': t['from_bank'],
+          'to_bank': t['to_bank'],
+          'amount': t['amount'],
+          'date': t['date'],
+          'synced': 1,
+          'supabase_id': t['id'],
+        });
+      }
+    } catch (e) {
+      debugPrint("Sync error: $e");
+    }
   }
 
   // ---------------- Loaders ----------------
@@ -131,11 +236,10 @@ class _HomeScreenState extends State<HomeScreen> {
           'dob': response['dob'] ?? '',
         });
       }
-    } catch (_) {
-      debugPrint("Offline mode: using cached user profile");
-    }
+    } catch (_) {}
   }
 
+  //----------------Function for App Tour----------------------
   Future<void> _startTourIfFirstTime() async {
     final done = await _secureStorage.read(key: _homeTourKey);
     if (done == "true") return;
@@ -155,6 +259,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await _secureStorage.write(key: _homeTourKey, value: "true");
   }
 
+  //-----------------------------------Helper---------------------------------------
+
+  String hideAmount(String amount) {
+    return _isAmountVisible ? amount : "₹ ••••";
+  }
+
+  //--------------------------------Function to Load Expenses from Supabase----------------------
   Future<void> _loadExpensesSeparately() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -162,9 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final expenses = await DatabaseHelper.instance.getExpenses(
-      user.id,
-    ); // ✅ FIXED
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
 
     double cash = 0.0;
     double online = 0.0;
@@ -191,6 +300,45 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _loadTransferAdjustments() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+
+    final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    final transfers = await DatabaseHelper.instance.getTransfers(user.id);
+
+    double cashAdj = 0;
+    double onlineAdj = 0;
+
+    for (final t in transfers) {
+      final date = (t['date'] ?? '').toString();
+
+      if (!date.startsWith(currentMonth)) continue;
+
+      final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+
+      final from = (t['from_type'] ?? '').toString().toLowerCase();
+
+      final to = (t['to_type'] ?? '').toString().toLowerCase();
+
+      if (from == 'cash') cashAdj -= amount;
+      if (to == 'cash') cashAdj += amount;
+
+      if (from == 'online') onlineAdj -= amount;
+      if (to == 'online') onlineAdj += amount;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _cashTransferAdjustment = cashAdj;
+      _onlineTransferAdjustment = onlineAdj;
+    });
+  }
+
+  //----------------------Function to Load Budget from Supabase------------------
   Future<void> _loadBudgetsSeparately() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -198,7 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    final budgets = await DatabaseHelper.instance.getBudget(user.id); // ✅ FIXED
+    final budgets = await DatabaseHelper.instance.getBudget(user.id);
 
     double cash = 0.0;
     double online = 0.0;
@@ -208,9 +356,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!date.startsWith(currentMonth)) continue;
 
       final amount = (entry['total'] as num?)?.toDouble() ?? 0.0;
-      final mode = (entry['mode'] ?? 'Cash').toString();
+      final mode = (entry['mode'] ?? 'Cash').toString().toLowerCase();
 
-      if (mode == 'Online') {
+      if (mode == 'online') {
         online += amount;
       } else {
         cash += amount;
@@ -236,12 +384,15 @@ class _HomeScreenState extends State<HomeScreen> {
         : (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
+  //--------------Refresh--------------------
   Future<void> _refreshAll() async {
     await _loadBudgetsSeparately();
     await _loadExpensesSeparately();
+    await _loadTransferAdjustments();
     //await _loadShoppingList();
   }
 
+  //-----------------Function for Logout---------------------
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -264,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (confirm == true) {
       try {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut(scope: SignOutScope.local);
 
         // Clear local cache AFTER signout
         await DatabaseHelper.instance.clearAllTables();
@@ -366,6 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   //----------------------------------UI---------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -398,6 +550,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               foregroundColor: colorScheme.surface,
               elevation: 0,
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    _isAmountVisible ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () async {
+                    setState(() {
+                      _isAmountVisible = !_isAmountVisible;
+                    });
+                    await _secureStorage.write(
+                      key: 'amount_visible',
+                      value: _isAmountVisible.toString(),
+                    );
+                  },
+                ),
+              ],
             ),
 
             SliverToBoxAdapter(
@@ -406,7 +574,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     _buildTotalRemainingCard(),
-                    //if (_activeShoppingList != null) _buildShoppingListCard(),
+
                     const SizedBox(height: 8),
                     _buildPieCard(),
                     _buildRemainingRow(),
@@ -433,6 +601,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant),
           color: colorScheme.surface,
           boxShadow: [
             BoxShadow(
@@ -450,7 +619,6 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: colorScheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: colorScheme.outlineVariant),
               ),
               child: Icon(Icons.savings, color: colorScheme.primary),
             ),
@@ -468,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    "₹ ${_totalRemaining.toStringAsFixed(2)}",
+                    hideAmount("₹ ${_totalRemaining.toStringAsFixed(2)}"),
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -643,6 +811,64 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            if (_cashBudget > 0 || _onlineBudget > 0) ...[
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.sync_alt),
+                  label: const Text(
+                    "Transfer",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.surface,
+                    foregroundColor: colorScheme.primary,
+                    elevation: 0,
+                    side: BorderSide(color: colorScheme.primary, width: 1.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferScreen(
+                          cashBalance: _cashRemaining,
+                          onlineBalance: _onlineRemaining,
+                        ),
+                      ),
+                    );
+
+                    if (result == true) {
+                      await _refreshAll();
+                    }
+                  },
+                ),
+              ),
+            ],
+
+            // ElevatedButton(
+            //   onPressed: () async {
+            //     final result = await Navigator.push(
+            //       context,
+            //       MaterialPageRoute(
+            //         builder: (_) => TransferScreen(
+            //           cashBalance: _cashRemaining,
+            //           onlineBalance: _onlineRemaining,
+            //         ),
+            //       ),
+            //     );
+
+            //     if (result == true) {
+            //       await _loadBudgetsSeparately();
+            //     }
+            //   },
+            //   child: Text("Test Transfer"),
+            // ),
           ],
         ),
       ),
@@ -708,12 +934,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 6),
             _drawerItem(Icons.person, "My Profile", '/profiles'),
             _drawerItem(Icons.info, "About Us", '/about'),
-            //_drawerItem(Icons.shopping_cart, "Shopping List", '/shopping_list'),
+
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+            _drawerItem(Icons.sync_alt, "Transfer Tracker", "/transfer"),
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
             _drawerItem(Icons.download, "Export Report", "/export_report"),
             _drawerItem(Icons.question_mark, "How To Use", '/how_to_use'),
+            _drawerItem(Icons.feedback, "Feedback", '/feedback'),
             const Divider(),
 
             ListTile(
@@ -741,9 +969,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
-      onTap: () {
+      onTap: () async {
         Navigator.pop(context);
-        Navigator.pushNamed(context, route);
+
+        if (route == "/transfer") {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TransferTracker(
+                cashBalance: _cashRemaining,
+                onlineBalance: _onlineRemaining,
+              ),
+            ),
+          );
+
+          await _refreshAll();
+        } else {
+          Navigator.pushNamed(context, route);
+        }
       },
     );
   }
@@ -800,7 +1043,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            "₹ ${amount.toStringAsFixed(2)}",
+            hideAmount("₹ ${amount.toStringAsFixed(2)}"),
             style: TextStyle(
               color: _amountColor(amount),
               fontWeight: FontWeight.bold,

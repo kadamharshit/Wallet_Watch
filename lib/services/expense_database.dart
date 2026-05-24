@@ -9,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('walletwatch.db');
+    _database = await _initDB('walletwatch_v2.db');
     return _database!;
   }
 
@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -41,14 +41,31 @@ class DatabaseHelper {
 
         if (oldVersion < 6) {
           await db.execute('''
-        CREATE TABLE IF NOT EXISTS user_profile (
-          user_id TEXT PRIMARY KEY,
-          name TEXT,
-          email TEXT,
-          mobile TEXT,
-          dob TEXT
-        )
-      ''');
+CREATE TABLE IF NOT EXISTS user_profile (
+  user_id TEXT PRIMARY KEY,
+  name TEXT,
+  email TEXT,
+  mobile TEXT,
+  dob TEXT
+)
+''');
+        }
+        if (oldVersion < 7) {
+          await db.execute('''
+    CREATE TABLE transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE,
+      user_id TEXT,
+      supabase_id INTEGER,
+      from_type TEXT,
+      to_type TEXT,
+      from_bank TEXT,
+      to_bank TEXT,
+      amount REAL,
+      date TEXT,
+      synced INTEGER DEFAULT 0
+    )
+  ''');
         }
       },
     );
@@ -71,7 +88,22 @@ CREATE TABLE expenses (
   synced INTEGER DEFAULT 0
 )
 ''');
-
+    await db.execute('''
+CREATE TABLE transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid TEXT UNIQUE,
+  user_id TEXT,
+  supabase_id INTEGER,
+  from_type TEXT,
+  to_type TEXT,
+  from_bank TEXT,
+  to_bank TEXT,
+  amount REAL,
+  date TEXT,
+  synced INTEGER DEFAULT 0
+ 
+)
+''');
     await db.execute('''
 CREATE TABLE budget (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +115,7 @@ CREATE TABLE budget (
   mode TEXT,
   bank TEXT,
   synced INTEGER DEFAULT 0
+ 
 )
 ''');
     await db.execute('''
@@ -151,6 +184,24 @@ CREATE TABLE IF NOT EXISTS user_profile (
     );
   }
 
+  Future<List<Map<String, dynamic>>> getExpensesByMonth(
+    int month,
+    int year,
+    String userId,
+  ) async {
+    final db = await database;
+
+    final monthStr = month.toString().padLeft(2, '0');
+
+    return await db.query(
+      'expenses',
+      where:
+          "user_id = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?",
+      whereArgs: [userId, monthStr, year.toString()],
+      orderBy: 'date DESC',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getUnsyncedExpenses(String userId) async {
     final db = await database;
 
@@ -175,6 +226,7 @@ CREATE TABLE IF NOT EXISTS user_profile (
 
   Future<int> insertBudget(Map<String, dynamic> budget) async {
     final db = await database;
+
     return await db.insert(
       'budget',
       budget,
@@ -232,7 +284,13 @@ CREATE TABLE IF NOT EXISTS user_profile (
       await db.rawQuery('SELECT COUNT(*) FROM budget'),
     );
 
-    return (expCount ?? 0) == 0 && (budgetCount ?? 0) == 0;
+    final transferCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM transfers'),
+    );
+
+    return (expCount ?? 0) == 0 &&
+        (budgetCount ?? 0) == 0 &&
+        (transferCount ?? 0) == 0;
   }
 
   Future<void> updateBudget(int id, Map<String, dynamic> values) async {
@@ -249,6 +307,7 @@ CREATE TABLE IF NOT EXISTS user_profile (
     final db = await database;
     await db.delete('expenses');
     await db.delete('budget');
+    await db.delete('transfers');
   }
 
   //---------------- Recent Travel Expense ----------------------
@@ -317,5 +376,46 @@ CREATE TABLE IF NOT EXISTS user_profile (
     );
 
     return res.isEmpty ? null : res.first;
+  }
+
+  //----------------TRANSFERS------------------------------
+  Future<int> insertTransfer(Map<String, dynamic> transfer) async {
+    final db = await database;
+    return await db.insert(
+      'transfers',
+      transfer,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getTransfers(String userId) async {
+    final db = await database;
+
+    return await db.query(
+      'transfers',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'date DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getUnsyncedTransfers(String userId) async {
+    final db = await database;
+    return await db.query(
+      'transfers',
+      where: 'synced = ? AND user_id = ?',
+      whereArgs: [0, userId],
+    );
+  }
+
+  Future<void> updateTransfer(int id, Map<String, dynamic> values) async {
+    final db = await database;
+
+    await db.update('transfers', values, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteTransfer(int id) async {
+    final db = await database;
+    await db.delete('transfers', where: 'id = ?', whereArgs: [id]);
   }
 }

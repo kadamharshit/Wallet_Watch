@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -27,9 +25,12 @@ class _ReportsPageState extends State<ReportsPage> {
   double _cashExpense = 0.0;
   double _onlineExpense = 0.0;
 
+  double _lastMonthExpense = 0;
+  double _expenseChangePercent = 0;
+
   double _totalBudget = 0.0;
-  double _cashBudget = 0.0;
-  double _onlineBudget = 0.0;
+
+  String _previousMonthLabel = "";
 
   Map<String, double> _categoryTotals = {};
 
@@ -50,6 +51,7 @@ class _ReportsPageState extends State<ReportsPage> {
     _loadReports();
   }
 
+  //------------------------Function to Load Data---------------------------------------
   Future<void> _loadReports() async {
     setState(() => _isLoading = true);
 
@@ -120,7 +122,7 @@ class _ReportsPageState extends State<ReportsPage> {
         cashBud += amount;
       }
     }
-
+    await _loadPreviousMonthData();
     setState(() {
       _availableMonths = monthList;
 
@@ -129,20 +131,130 @@ class _ReportsPageState extends State<ReportsPage> {
       _onlineExpense = onlineExp;
 
       _totalBudget = totalBud;
-      _cashBudget = cashBud;
-      _onlineBudget = onlineBud;
 
       _categoryTotals = categoryMap;
       _isLoading = false;
     });
   }
 
+  String get _topCategoryPercent {
+    if (_categoryTotals.isEmpty || _totalExpense <= 0) {
+      return '0';
+    }
+
+    final sorted = _categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return ((sorted.first.value / _totalExpense) * 100).toStringAsFixed(0);
+  }
+
+  double get _budgetUsagePercent {
+    if (_totalBudget <= 0) return 0;
+    return (_totalExpense / _totalBudget).clamp(0, 1);
+  }
+
+  List<String> _generateInsights() {
+    final insights = <String>[];
+
+    if (_totalExpense <= 0) {
+      insights.add("No expenses were recorded for this month.");
+      return insights;
+    }
+
+    if (_topCategory != "-") {
+      insights.add(
+        "$_topCategory accounted for $_topCategoryPercent% of your spending this month.",
+      );
+    }
+
+    final usage = _totalBudget <= 0 ? 0 : (_totalExpense / _totalBudget) * 100;
+
+    insights.add(
+      "You used ${usage.toStringAsFixed(0)}% of your monthly budget.",
+    );
+
+    if (_onlineExpense > _cashExpense) {
+      insights.add("Most of your spending happened through online payments.");
+    } else {
+      insights.add("Cash transactions dominated your expenses this month.");
+    }
+
+    if (_remaining < 0) {
+      insights.add(
+        "You exceeded your budget by ₹${_remaining.abs().toStringAsFixed(0)}.",
+      );
+    } else if (_remaining > 0) {
+      insights.add("You saved ₹${_remaining.toStringAsFixed(0)} this month.");
+    }
+
+    if (_categoryTotals.length >= 4) {
+      insights.add("Your spending was distributed across multiple categories.");
+    }
+
+    return insights;
+  }
+
+  Future<void> _loadPreviousMonthData() async {
+    final selectedDate = DateTime.parse("$_selectedMonth-01");
+    final user = supabase.auth.currentUser;
+
+    if (user == null) return;
+
+    final prevMonth = DateTime(
+      selectedDate.month == 1 ? selectedDate.year - 1 : selectedDate.year,
+
+      selectedDate.month == 1 ? 12 : selectedDate.month - 1,
+    );
+
+    _previousMonthLabel = "${_monthName(prevMonth.month)} ${prevMonth.year}";
+
+    final expenses = await DatabaseHelper.instance.getExpensesByMonth(
+      prevMonth.month,
+      prevMonth.year,
+      user.id,
+    );
+
+    double total = 0;
+
+    for (final e in expenses) {
+      total += (e['total'] as num?)?.toDouble() ?? 0;
+    }
+
+    _lastMonthExpense = total;
+
+    if (_lastMonthExpense > 0) {
+      _expenseChangePercent =
+          ((_totalExpense - _lastMonthExpense) / _lastMonthExpense) * 100;
+    }
+  }
+
+  //---------------------------Helper----------------------------------
   String _monthLabel(String m) {
     try {
       return DateFormat('MMMM yyyy').format(DateTime.parse("$m-01"));
     } catch (_) {
       return m;
     }
+  }
+
+  String _monthName(int month) {
+    const months = [
+      '',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[month];
   }
 
   double get _remaining => _totalBudget - _totalExpense;
@@ -154,11 +266,12 @@ class _ReportsPageState extends State<ReportsPage> {
     return sorted.first.key;
   }
 
-  String get _mostUsedMode {
-    if (_cashExpense == 0 && _onlineExpense == 0) return "-";
-    return _cashExpense >= _onlineExpense ? "Cash" : "Online";
-  }
+  // String get _mostUsedMode {
+  //   if (_cashExpense == 0 && _onlineExpense == 0) return "-";
+  //   return _cashExpense >= _onlineExpense ? "Cash" : "Online";
+  // }
 
+  //---------------------------------UI-----------------------------------------
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -205,6 +318,62 @@ class _ReportsPageState extends State<ReportsPage> {
               Icons.pie_chart_outline,
               color: Theme.of(context).colorScheme.surface,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _budgetHealth {
+    if (_totalBudget <= 0) return "No Budget";
+
+    final usage = (_totalExpense / _totalBudget) * 100;
+
+    if (usage < 70) return "Healthy";
+    if (usage < 90) return "Moderate";
+
+    return "Warning";
+  }
+
+  String get _spendingStyle {
+    return _onlineExpense > _cashExpense ? "Mostly Online" : "Mostly Cash";
+  }
+
+  String get _savingsStatus {
+    if (_remaining >= 0) {
+      return "₹${_remaining.toStringAsFixed(0)} Remaining";
+    }
+
+    return "Budget Exceeded";
+  }
+
+  Widget _healthCard({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: colorScheme.primary, size: 22),
+          const SizedBox(height: 8),
+
+          Text(
+            title,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
         ],
       ),
@@ -280,6 +449,40 @@ class _ReportsPageState extends State<ReportsPage> {
             value,
             style: TextStyle(fontWeight: FontWeight.bold, color: valueColor),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _financialTile({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: colorScheme.primary.withOpacity(0.12),
+            child: Icon(icon, color: colorScheme.primary),
+          ),
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -421,6 +624,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                 if (val == null) return;
                                 setState(() => _selectedMonth = val);
                                 await _loadReports();
+                                await _loadPreviousMonthData();
                               },
                             ),
                           ),
@@ -554,15 +758,129 @@ class _ReportsPageState extends State<ReportsPage> {
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 10),
-                                _insightRow("Top Category", _topCategory),
-                                const SizedBox(height: 6),
-                                _insightRow("Most used mode", _mostUsedMode),
-                                const SizedBox(height: 6),
-                                _insightRow(
-                                  "Budget usage",
-                                  _totalBudget <= 0
-                                      ? "No budget set"
-                                      : "${((_totalExpense / _totalBudget) * 100).toStringAsFixed(0)}%",
+                                ..._generateInsights().map(
+                                  (text) => Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surfaceVariant
+                                          .withOpacity(0.35),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: colorScheme.outlineVariant,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.auto_awesome,
+                                          size: 18,
+                                          color: colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            text,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Financial Health",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 14),
+
+                                _financialTile(
+                                  title: "Budget Health",
+                                  value: _budgetHealth,
+                                  icon: Icons.monitor_heart,
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                _financialTile(
+                                  title: "Spending Style",
+                                  value: _spendingStyle,
+                                  icon: Icons.account_balance_wallet,
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                _financialTile(
+                                  title: "Savings Status",
+                                  value: _savingsStatus,
+                                  icon: Icons.savings,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Monthly Comparison",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 14),
+
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _expenseChangePercent >= 0
+                                          ? Icons.trending_up
+                                          : Icons.trending_down,
+                                      color: _expenseChangePercent >= 0
+                                          ? Colors.red
+                                          : Colors.green,
+                                    ),
+
+                                    const SizedBox(width: 10),
+
+                                    Expanded(
+                                      child: Text(
+                                        _lastMonthExpense <= 0
+                                            ? "No previous month data available."
+                                            : _expenseChangePercent >= 0
+                                            ? "Your spending increased by ${_expenseChangePercent.abs().toStringAsFixed(0)}% compared to $_previousMonthLabel."
+                                            : "Your spending decreased by ${_expenseChangePercent.abs().toStringAsFixed(0)}% compared to $_previousMonthLabel.",
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -574,26 +892,6 @@ class _ReportsPageState extends State<ReportsPage> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _insightRow(String title, String value) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.primary,
-          ),
-        ),
-      ],
     );
   }
 }

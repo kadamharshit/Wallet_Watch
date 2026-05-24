@@ -31,6 +31,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _fetchUserProfile();
   }
 
+  //-------------------------------Function to Fetch User Details from Supabase-------------------------
   Future<void> _fetchUserProfile() async {
     final user = supabase.auth.currentUser;
 
@@ -76,12 +77,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
         setState(() {});
       }
-    } catch (_) {
-      // offline — ignore silently
-      debugPrint("Offline mode: loaded profile from cache");
-    }
+    } catch (_) {}
   }
 
+  //------------------------------Save Changes Made---------------------------------
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
       setState(() => _autoValidate = AutovalidateMode.onUserInteraction);
@@ -119,8 +118,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
         );
       }
     } catch (e) {
-      debugPrint('Error saving profile: $e');
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Failed to update profile')));
@@ -129,6 +126,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  //---------------------------------UI and Logic For Change Password-----------------------------
   Future<void> _showChangePasswordDialog() async {
     final controller = TextEditingController();
 
@@ -205,6 +203,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
+  //------------------Date Picker-----------------------------------
   Future<void> _pickDob() async {
     DateTime initialDate = DateTime.now().subtract(
       const Duration(days: 365 * 18),
@@ -230,6 +229,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  //-----------------------------------------------UI---------------------------------------------
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,

@@ -19,23 +19,22 @@ class _SplashScreenState extends State<SplashScreen> {
     _checkSession();
   }
 
+  //---------------------------Function to Check Session-----------------------------------
   Future<void> _checkSession() async {
-    final session = supabase.auth.currentSession;
+    await Future.delayed(const Duration(seconds: 2));
 
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final session = supabase.auth.currentSession;
 
     if (!mounted) return;
 
-    if (session != null &&
-        session.user != null &&
-        session.user!.emailConfirmedAt != null) {
+    if (session != null && session.user.emailConfirmedAt != null) {
       Navigator.pushReplacementNamed(context, '/home');
     } else {
-      await supabase.auth.signOut();
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
 
+  //-------------------------------------------UI------------------------------------------
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -68,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ✅ LOGO IMAGE FROM ASSET
+                //  LOGO IMAGE FROM ASSET
                 Image.asset(
                   "assets/icon.png",
                   height: 96,

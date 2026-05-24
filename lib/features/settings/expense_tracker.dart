@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:walletwatch/features/expense/edit_expense.dart';
 import 'package:walletwatch/services/expense_database.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:walletwatch/widgets/tracker_widgets.dart';
 
 class ExpenseTracker extends StatefulWidget {
   const ExpenseTracker({super.key});
@@ -20,10 +20,11 @@ class ExpenseTracker extends StatefulWidget {
 class _ExpenseTrackerState extends State<ExpenseTracker> {
   final supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> _expenses = [];
   //bool _isLoading = true;
   bool _hasLoadedLocal = false;
-  bool _isOnline = false;
+  //bool _isOnline = false;
+
+  List<Map<String, dynamic>> _expenses = [];
 
   String _filterMode = 'All';
   String _selectedCatgeory = 'All';
@@ -58,6 +59,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     _loadExpenses();
   }
 
+  //--------------------------------App Tour---------------------------------------------
   Future<void> _startExpenseTrackerTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _expenseTrackerTourDoneKey);
     if (done == "true") return;
@@ -74,15 +76,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     await _secureStorage.write(key: _expenseTrackerTourDoneKey, value: "true");
   }
 
-  Future<bool> _checkConnection() async {
-    try {
-      final result = await InternetAddress.lookup('example.com');
-      return result.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
+  //--------------------------------------HELPER----------------------------------
   Future<void> _refreshExpenses() async {
     await _loadExpenses();
   }
@@ -102,6 +96,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     _availableMonths = months;
   }
 
+  //------------------------------Function to Load Expenses----------------------------
   Future<void> _loadExpenses() async {
     // STEP 1: Load local instantly
     final user = supabase.auth.currentUser;
@@ -118,77 +113,10 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     });
 
     // STEP 2: Sync in background (DO NOT await)
-    _syncExpensesInBackground();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startExpenseTrackerTourOnlyOnce();
     });
-  }
-
-  Future<void> _syncExpensesInBackground() async {
-    final isOnline = await _checkConnection();
-    final user = supabase.auth.currentUser;
-
-    if (!isOnline || user == null) return;
-
-    try {
-      // Sync local unsynced expenses
-      await _syncLocalToSupabase();
-
-      // Fetch latest from Supabase
-      final response = await supabase
-          .from('expenses')
-          .select()
-          .eq('user_id', user.id)
-          .order('date', ascending: false);
-
-      final serverExpenses = List<Map<String, dynamic>>.from(response);
-
-      for (final exp in serverExpenses) {
-        await DatabaseHelper.instance.upsertExpenseByUuid({
-          'uuid': exp['uuid'],
-          'user_id': user.id,
-          'supabase_id': exp['id'],
-          'date': exp['date'],
-          'shop': exp['shop'] ?? '',
-          'category': exp['category'] ?? '',
-          'items': exp['items'] ?? '',
-          'total': exp['total'] ?? 0,
-          'mode': exp['mode'] ?? 'Cash',
-          'bank': exp['bank'] ?? '',
-          'synced': 1,
-        });
-      }
-
-      // Reload updated data silently
-      final updatedExpenses = await DatabaseHelper.instance.getExpenses(
-        user.id,
-      );
-
-      if (!mounted) return;
-
-      if (mounted && !_listEqualsByUuid(_expenses, updatedExpenses)) {
-        setState(() {
-          _expenses = updatedExpenses;
-          _buildAvailableMonths(_expenses);
-        });
-      }
-    } catch (e) {
-      debugPrint("Background sync error: $e");
-    }
-  }
-
-  bool _listEqualsByUuid(
-    List<Map<String, dynamic>> a,
-    List<Map<String, dynamic>> b,
-  ) {
-    if (a.length != b.length) return false;
-
-    for (int i = 0; i < a.length; i++) {
-      if (a[i]['uuid'] != b[i]['uuid']) return false;
-    }
-
-    return true;
   }
 
   // -----------------Shimmer effect---------------------
@@ -246,6 +174,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
+  //-----------------------------------------------UI-------------------------------------------
   Widget _infoRow(String label, dynamic value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -476,40 +405,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
-  Future<void> _syncLocalToSupabase() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final unsynced = await DatabaseHelper.instance.getUnsyncedExpenses(user.id);
-
-    for (final exp in unsynced) {
-      try {
-        final response = await supabase
-            .from('expenses')
-            .insert({
-              'uuid': exp['uuid'],
-              'user_id': user.id,
-              'date': exp['date'],
-              'shop': exp['shop'],
-              'category': exp['category'],
-              'items': exp['items'],
-              'total': exp['total'],
-              'mode': exp['mode'],
-              'bank': exp['bank'],
-              'created_at': DateTime.now().toIso8601String(),
-            })
-            .select('id')
-            .single();
-
-        await DatabaseHelper.instance.updateExpense(exp['id'], {
-          'supabase_id': response['id'],
-          'synced': 1,
-        });
-      } catch (e) {
-        debugPrint("Sync error: $e");
-      }
-    }
-  }
+  //------------------------Function to Sync SQLite to Supabase--------------------------------
 
   String _formatDate(String date) {
     final parsed = DateTime.tryParse(date);
@@ -726,7 +622,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
     return DropdownButtonFormField<String>(
       value: safeValue,
-      decoration: _pillDecoration(
+      decoration: buildPillDecoration(
+        context: context,
         hint: "Mode",
         icon: Icons.account_balance_wallet,
       ),
@@ -748,7 +645,11 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
 
     return DropdownButtonFormField<String>(
       value: safeValue,
-      decoration: _pillDecoration(hint: "Category", icon: Icons.category),
+      decoration: buildPillDecoration(
+        context: context,
+        hint: "Category",
+        icon: Icons.category,
+      ),
       items: _categories
           .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
           .toList(),
@@ -886,43 +787,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     );
   }
 
-  Widget _sectionContainer({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.4)
-                : Colors.black.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  InputDecoration _pillDecoration({
-    required String hint,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: colorScheme.surfaceVariant.withOpacity(0.5),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(30),
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -943,12 +807,14 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                         key: _monthKey,
                         description:
                             "Select month to see expenses for that month",
-                        child: _sectionContainer(
+                        child: buildSectionContainer(
+                          context: context,
                           child: DropdownButtonFormField<String>(
                             value: _availableMonths.contains(_selectedMonth)
                                 ? _selectedMonth
                                 : null,
-                            decoration: _pillDecoration(
+                            decoration: buildPillDecoration(
+                              context: context,
                               hint: "Select Month",
                               icon: Icons.calendar_month,
                             ),
@@ -975,7 +841,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                     Showcase(
                       key: _chartKey,
                       description: "Shows Cash vs Online expense split",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -998,12 +865,13 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                       key: _summaryKey,
                       description:
                           "This shows total, cash and online spending for the month",
-                      child: _sectionContainer(
+                      child: buildSectionContainer(
+                        context: context,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              "Summary",
+                              "Expense Summary",
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -1110,7 +978,8 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                       child: !_hasLoadedLocal
                           ? _buildShimmerList() // or shimmer
                           : _filteredExpenses.isEmpty
-                          ? _sectionContainer(
+                          ? buildSectionContainer(
+                              context: context,
                               child: Column(
                                 children: [
                                   Container(

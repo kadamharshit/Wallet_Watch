@@ -41,6 +41,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     _loadMonthsAndData();
   }
 
+  //-------------------------------Function to Check Is Month Completed--------------------------------
   bool _isMonthCompleted(String monthKey) {
     final selected = DateTime.parse("$monthKey-01");
     final now = DateTime.now();
@@ -48,6 +49,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     return now.isAfter(nextMonth) || now.isAtSameMomentAs(nextMonth);
   }
 
+  //---------------------------Function to Load Data--------------------------------
   Future<void> _loadMonthsAndData() async {
     setState(() => _isLoading = true);
 
@@ -102,6 +104,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     });
   }
 
+  //-----------------------------Helper-----------------------------------
   String _monthLabel(String m) {
     try {
       return DateFormat('MMMM yyyy').format(DateTime.parse("$m-01"));
@@ -110,8 +113,40 @@ class _ExportReportPageState extends State<ExportReportPage> {
     }
   }
 
+  String _getSpendingStyle() {
+    double cash = 0;
+    double online = 0;
+
+    for (final e in _monthExpenses) {
+      final total = (e['total'] as num?)?.toDouble() ?? 0;
+
+      if ((e['mode'] ?? '').toString().toLowerCase() == 'cash') {
+        cash += total;
+      } else {
+        online += total;
+      }
+    }
+
+    return online > cash ? "Mostly Online" : "Mostly Cash";
+  }
+
+  Map<String, double> _categoryTotals() {
+    final map = <String, double>{};
+
+    for (final e in _monthExpenses) {
+      final category = (e['category'] ?? 'Other').toString();
+
+      final total = (e['total'] as num?)?.toDouble() ?? 0;
+
+      map[category] = (map[category] ?? 0) + total;
+    }
+
+    return map;
+  }
+
   double get _remaining => _totalBudget - _totalExpense;
 
+  //---------------------------Function to Export PDF-------------------------------------
   Future<void> _exportPdf() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,12 +169,20 @@ class _ExportReportPageState extends State<ExportReportPage> {
             "WalletWatch - Expense Report",
             style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
           ),
+          pw.SizedBox(height: 4),
+
+          pw.Text(
+            "Generated on: ${DateFormat('dd MMM yyyy • hh:mm a').format(DateTime.now())}",
+            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
           pw.SizedBox(height: 6),
           pw.Text("Month: ${_monthLabel(_selectedMonth)}"),
           pw.SizedBox(height: 12),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
+
             decoration: pw.BoxDecoration(
+              borderRadius: pw.BorderRadius.circular(10),
               border: pw.Border.all(color: PdfColors.grey),
             ),
             child: pw.Column(
@@ -166,30 +209,104 @@ class _ExportReportPageState extends State<ExportReportPage> {
             ),
           ),
           pw.SizedBox(height: 14),
+
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(10),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  "Financial Insights",
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Bullet(
+                  text:
+                      "Budget Health: ${_remaining >= 0 ? "Within Budget" : "Overspending"}",
+                ),
+
+                pw.Bullet(text: "Spending Style: ${_getSpendingStyle()}"),
+
+                pw.Bullet(
+                  text: _remaining >= 0
+                      ? "Savings Status: ₹${_remaining.toStringAsFixed(0)} Remaining"
+                      : "Savings Status: Overspent by ₹${_remaining.abs().toStringAsFixed(0)}",
+                ),
+
+                pw.Bullet(
+                  text: _remaining >= 0
+                      ? "You managed your spending efficiently this month."
+                      : "Your expenses exceeded your planned budget.",
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 14),
+
+          pw.Text(
+            "Category Breakdown",
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+          ),
+
+          pw.SizedBox(height: 8),
+
+          ..._categoryTotals().entries.map(
+            (e) => pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 6),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(e.key),
+                  pw.Text(
+                    "₹${e.value.toStringAsFixed(0)}",
+                    style: pw.TextStyle(font: ttf),
+                  ),
+                ],
+              ),
+            ),
+          ),
           pw.Text(
             "Transactions",
             style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
           ),
+
           pw.SizedBox(height: 8),
-          pw.Table.fromTextArray(
-            headers: ["Date", "Shop", "Category", "Mode", "Total"],
-            data: _monthExpenses.map((e) {
-              return [
-                (e['date'] ?? '').toString(),
-                (e['shop'] ?? '').toString(),
-                (e['category'] ?? '').toString(),
-                (e['mode'] ?? '').toString(),
-                "₹${(e['total'] ?? 0).toString()}",
-              ];
-            }).toList(),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              font: ttf,
+
+          if (_monthExpenses.isEmpty)
+            pw.Text("No transactions recorded for this month.")
+          else
+            pw.Table.fromTextArray(
+              headers: ["#", "Date", "Shop", "Category", "Mode", "Amount"],
+              data: List.generate(_monthExpenses.length, (index) {
+                final e = _monthExpenses[index];
+
+                return [
+                  "${index + 1}",
+                  (e['date'] ?? '').toString().split(" ").first,
+                  (e['shop'] ?? '').toString(),
+                  (e['category'] ?? '').toString(),
+                  (e['mode'] ?? '').toString(),
+                  "₹${(e['total'] ?? 0).toString()}",
+                ];
+              }),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                font: ttf,
+              ),
+              cellStyle: pw.TextStyle(font: ttf),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
+              ),
+              cellAlignment: pw.Alignment.centerLeft,
             ),
-            cellStyle: pw.TextStyle(font: ttf),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            cellAlignment: pw.Alignment.centerLeft,
-          ),
         ],
       ),
     );
@@ -208,6 +325,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     await Share.shareXFiles([XFile(file.path)], text: "WalletWatch Report PDF");
   }
 
+  //-----------------------------------Function to Export Excel-------------------------------
   Future<void> _exportExcel() async {
     if (!_isMonthCompleted(_selectedMonth)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -283,6 +401,7 @@ class _ExportReportPageState extends State<ExportReportPage> {
     ], text: "WalletWatch Report Excel");
   }
 
+  //-----------------------------UI-------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,

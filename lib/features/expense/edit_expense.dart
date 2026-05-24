@@ -45,9 +45,23 @@ class _EditExpensePageState extends State<EditExpensePage> {
     'Other',
   ];
 
+  final List<String> _travelModes = [
+    "Bus",
+    "Train",
+    "Metro",
+    "Rickshaw",
+    "Taxi",
+    "Flight",
+    "Ferry",
+    "Other",
+  ];
+
   final List<String> _modes = const ['Cash', 'Online'];
 
   final List<String> _units = const ['pcs', 'kg', 'g', 'L', 'ml'];
+
+  static const double WARNING_LIMIT = 50000;
+  static const double MAX_LIMIT = 200000;
 
   @override
   void initState() {
@@ -82,6 +96,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     _updateTotal();
   }
 
+  //-------------------------------Function to Load Banks Available---------------------------
   Future<void> _loadBanks() async {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
@@ -104,11 +119,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
       setState(() {
         _availableBanks = banks;
       });
-    } catch (e) {
-      debugPrint("Bank load error: $e");
-    }
+    } catch (e) {}
   }
 
+  //--------------------------------------Function to Load Existing Items in Expense----------------------------------
   void _loadExistingItems() {
     final raw = (widget.expense['items'] ?? '').toString().trim();
 
@@ -174,6 +188,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     if (itemInputs.isEmpty) itemInputs = [{}];
   }
 
+  //-------------------------HELPER------------------------------------
   void _updateTotal() {
     total = itemInputs.fold(0.0, (sum, i) {
       return sum + (double.tryParse(i['amount'] ?? '0') ?? 0);
@@ -204,6 +219,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
     });
   }
 
+  //-----------------------------Date Picker---------------------------------
   Future<void> _pickDate() async {
     final initial = DateTime.tryParse(_dateString) ?? DateTime.now();
 
@@ -242,7 +258,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
     return jsonEncode(list);
   }
 
+  //---------------------------------Function to Save Changes Made-----------------------------
   Future<void> _saveChanges() async {
+    if (_saving) return;
+
     if (!_formKey.currentState!.validate()) return;
 
     if (total <= 0) {
@@ -250,6 +269,21 @@ class _EditExpensePageState extends State<EditExpensePage> {
         const SnackBar(content: Text('Total must be greater than 0')),
       );
       return;
+    }
+    if (total > MAX_LIMIT) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Total expense cannot exceed ₹2,00,000')),
+      );
+      return;
+    }
+    if (total > WARNING_LIMIT) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar(); // add this
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('High expense amount'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
 
     setState(() => _saving = true);
@@ -311,15 +345,15 @@ class _EditExpensePageState extends State<EditExpensePage> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      debugPrint('Edit error: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update expense: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update expense. Try again.')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  //-----------------------------------------------UI-------------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,
@@ -436,15 +470,22 @@ class _EditExpensePageState extends State<EditExpensePage> {
           ),
           const SizedBox(height: 10),
           if (isTravel) ...[
-            TextFormField(
-              initialValue: item["mode"],
+            DropdownButtonFormField<String>(
+              value: _travelModes.contains(item["mode"]) ? item["mode"] : null,
+              items: _travelModes
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                  .toList(),
+              onChanged: (val) {
+                setState(() {
+                  item["mode"] = val ?? "";
+                });
+              },
               decoration: _pillDecoration(
-                hint: "Mode",
-                icon: Icons.directions_bus_outlined,
+                hint: "Transport Mode",
+                icon: Icons.directions_bus,
               ),
-              onChanged: (val) => item["mode"] = val,
               validator: (val) =>
-                  val == null || val.trim().isEmpty ? "Enter mode" : null,
+                  val == null || val.isEmpty ? "Select mode" : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
@@ -485,7 +526,11 @@ class _EditExpensePageState extends State<EditExpensePage> {
               },
               validator: (val) {
                 final a = double.tryParse(val ?? "");
+
                 if (a == null || a <= 0) return "Enter valid amount";
+
+                if (a > MAX_LIMIT) return "Max ₹2,00,000 allowed";
+
                 return null;
               },
             ),
@@ -565,7 +610,11 @@ class _EditExpensePageState extends State<EditExpensePage> {
               },
               validator: (val) {
                 final a = double.tryParse(val ?? "");
+
                 if (a == null || a <= 0) return "Enter valid amount";
+
+                if (a > MAX_LIMIT) return "Max ₹2,00,000 allowed";
+
                 return null;
               },
             ),

@@ -83,6 +83,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   static const String _addExpenseOnlineBankTourDoneKey =
       "walletwatch_add_expense_online_bank_tour_done";
 
+  static const double WARNING_LIMIT = 50000;
+  static const double MAX_LIMIT = 200000;
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +98,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  //-------------------------Function for Loading Most Used Travel----------------------------
   Future<void> _loadMostUsedTravels() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -139,6 +143,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
+  //----------------------------------App Tour-------------------------------------
   Future<void> _startAddExpenseTourOnlyOnce() async {
     final done = await _secureStorage.read(key: _addExpenseTourDoneKey);
     if (done == "true") return;
@@ -155,6 +160,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     await _secureStorage.write(key: _addExpenseTourDoneKey, value: "true");
   }
 
+  //----------------------------Function to check internet Connection--------------------------
   Future<bool> _hasInternetConnection() async {
     try {
       final result = await InternetAddress.lookup('example.com');
@@ -164,6 +170,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
+  //----------------------------Fetch Available----------------------------------
   Future<void> _fetchAvailableBanks() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -185,6 +192,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   void _addItem() => setState(() => itemInputs.add({}));
 
+  //--------------------HELPER-----------------------------------
   void _removeItem(int index) {
     if (itemInputs.length == 1) return;
     setState(() {
@@ -238,14 +246,14 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
-  Future<void> _loadRecentTravels() async {
-    final data = await DatabaseHelper.instance.getRecentTravelExpenses(
-      limit: 5,
-    );
-    setState(() {
-      _recentTravels = data;
-    });
-  }
+  // Future<void> _loadRecentTravels() async {
+  //   final data = await DatabaseHelper.instance.getRecentTravelExpenses(
+  //     limit: 5,
+  //   );
+  //   setState(() {
+  //     _recentTravels = data;
+  //   });
+  // }
 
   void _applyTravelTemplate(Map<String, dynamic> exp) {
     final raw = (exp['items'] ?? '').toString().trim();
@@ -285,11 +293,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           _showItemsSection = true;
         });
       }
-    } catch (e) {
-      debugPrint("Failed to apply travel template: $e");
-    }
+    } catch (e) {}
   }
 
+  //------------------------------Function to Save Expense----------------------------------
   Future<void> _saveExpense() async {
     if (_isSaving) return;
 
@@ -301,6 +308,21 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         const SnackBar(content: Text("Total must be greater than 0")),
       );
       return;
+    }
+    if (total > MAX_LIMIT) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Total expense cannot exceed ₹2,00,000')),
+      );
+      return;
+    }
+    if (total > WARNING_LIMIT) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('High expense amount'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
     setState(() => _isSaving = true);
 
@@ -379,7 +401,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           'synced': 1,
         });
       } catch (e) {
-        debugPrint("Supabase insert failed, saved offline: $e");
       } finally {
         if (mounted) {
           setState(() {
@@ -396,6 +417,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     Navigator.pop(context, true);
   }
 
+  //-------------------------------Date Picker-------------------------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -410,6 +432,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
+  //-----------------------------UI--------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
     required IconData icon,
@@ -495,6 +518,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   _travelModeController.text = val ?? "";
                 });
               },
+              validator: (val) =>
+                  val == null || val.isEmpty ? "Select mode" : null,
               decoration: _pillDecoration(
                 hint: "Transport Mode",
                 icon: Icons.directions,
@@ -509,7 +534,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ),
               onChanged: (val) => item['start'] = val,
               validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter start point' : null,
+                  val == null || val.isEmpty ? 'Enter start location' : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
@@ -534,8 +559,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 item['amount'] = val;
                 _updateTotal();
               },
-              validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter amount' : null,
+              validator: (val) {
+                final amt = double.tryParse(val ?? '');
+
+                if (amt == null || amt <= 0) {
+                  return 'Enter valid amount';
+                }
+
+                if (amt > MAX_LIMIT) {
+                  return 'Max ₹2,00,000 allowed';
+                }
+
+                return null;
+              },
             ),
           ] else ...[
             TextFormField(
@@ -599,8 +635,19 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 item['amount'] = val;
                 _updateTotal();
               },
-              validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter amount' : null,
+              validator: (val) {
+                final amt = double.tryParse(val ?? '');
+
+                if (amt == null || amt <= 0) {
+                  return 'Enter valid amount';
+                }
+
+                if (amt > MAX_LIMIT) {
+                  return 'Max ₹2,00,000 allowed';
+                }
+
+                return null;
+              },
             ),
           ],
         ],

@@ -10,6 +10,7 @@ class HowToUse extends StatefulWidget {
 class _HowToUseState extends State<HowToUse> {
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
+  //------------------------------------UI----------------------------------------------------------------
   Widget _header(BuildContext context) {
     return Container(
       width: double.infinity,
