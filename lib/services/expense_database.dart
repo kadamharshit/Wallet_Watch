@@ -184,6 +184,24 @@ CREATE TABLE IF NOT EXISTS user_profile (
     );
   }
 
+  Future<List<Map<String, dynamic>>> getExpensesByMonth(
+    int month,
+    int year,
+    String userId,
+  ) async {
+    final db = await database;
+
+    final monthStr = month.toString().padLeft(2, '0');
+
+    return await db.query(
+      'expenses',
+      where:
+          "user_id = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ?",
+      whereArgs: [userId, monthStr, year.toString()],
+      orderBy: 'date DESC',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getUnsyncedExpenses(String userId) async {
     final db = await database;
 
