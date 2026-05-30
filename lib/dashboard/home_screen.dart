@@ -91,10 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
 
-      if (isEmpty) {
-        await _syncFromSupabase(user.id);
-      }
-
       await SyncService.syncAll();
 
       await _loadUserInfo();
