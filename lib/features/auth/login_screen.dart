@@ -42,6 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
+
       if (authRes.user != null) {
         // EMAIL CONFIRMATION CHECK
         if (authRes.user!.emailConfirmedAt == null) {
@@ -89,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _errorMessage = "No internet connection";
       });
-    } catch (e) {
+    } catch (e, stack) {
       setState(() {
         _errorMessage = e.toString();
       });
@@ -140,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
   //-----------------------Function to Sync Supabase to SQLite (For Offline Access)-------------------------------
   Future<void> _initialSupabaseToLocalSync(User user) async {
     // ALWAYS sync profile
+
     var profile = await supabase
         .from('users')
         .select()
