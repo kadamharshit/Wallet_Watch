@@ -569,13 +569,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Column(
                   children: [
-                    _buildTotalRemainingCard(),
+                    if ((_cashBudget + _onlineBudget) == 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: _buildNoBudgetCard(),
+                      )
+                    else ...[
+                      _buildTotalRemainingCard(),
+
+                      const SizedBox(height: 8),
+
+                      _buildPieCard(),
+
+                      _buildRemainingRow(),
+                    ],
 
                     const SizedBox(height: 8),
-                    _buildPieCard(),
-                    _buildRemainingRow(),
-                    const SizedBox(height: 8),
+
                     _buildBottomButtons(),
+
                     const SizedBox(height: 18),
                   ],
                 ),
@@ -742,6 +757,69 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNoBudgetCard() {
+    final monthName = DateFormat('MMMM yyyy').format(DateTime.now());
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 42,
+            color: Colors.orange,
+          ),
+
+          const SizedBox(height: 10),
+
+          Text(
+            "No Budget Added",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            "You haven't added a budget for $monthName yet.",
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+            (_cashExpense + _onlineExpense) > 0
+                ? "Expenses are recorded, but remaining balance will be available after setting a budget."
+                : "Add a budget to start tracking this month's spending.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushNamed(context, '/budget');
+            },
+            icon: const Icon(Icons.add),
+            label: const Text("Add Budget"),
+          ),
+        ],
+      ),
     );
   }
 
