@@ -310,15 +310,37 @@ CREATE TABLE IF NOT EXISTS user_profile (
     await db.delete('transfers');
   }
 
+  Future<void> upsertBudgetByUuid(Map<String, dynamic> budget) async {
+    final db = await database;
+
+    final exisitng = await db.query(
+      'budget',
+      where: 'uuid = ? AND user_id = ?',
+      whereArgs: [budget['uuid'], budget['user_id']],
+    );
+
+    if (exisitng.isEmpty) {
+      await db.insert('budget', budget);
+    } else {
+      await db.update(
+        'budget',
+        budget,
+        where: 'uuid = ? AND user_id = ?',
+        whereArgs: [budget['uuid'], budget['user_id']],
+      );
+    }
+  }
+
   //---------------- Recent Travel Expense ----------------------
   Future<List<Map<String, dynamic>>> getRecentTravelExpenses({
+    required String userId,
     int limit = 5,
   }) async {
     final db = await database;
     return await db.query(
       'expenses',
-      where: 'category = ?',
-      whereArgs: ['Travel'],
+      where: 'category = ? AND user_id = ?',
+      whereArgs: ['Travel', userId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -417,5 +439,26 @@ CREATE TABLE IF NOT EXISTS user_profile (
   Future<void> deleteTransfer(int id) async {
     final db = await database;
     await db.delete('transfers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> upsertTransferByUuid(Map<String, dynamic> transfer) async {
+    final db = await database;
+
+    final existing = await db.query(
+      'transfers',
+      where: 'uuid = ? AND user_id = ?',
+      whereArgs: [transfer['uuid'], transfer['user_id']],
+    );
+
+    if (existing.isEmpty) {
+      await db.insert('transfers', transfer);
+    } else {
+      await db.update(
+        'transfers',
+        transfer,
+        where: 'uuid = ? AND user_id = ?',
+        whereArgs: [transfer['uuid'], transfer['user_id']],
+      );
+    }
   }
 }

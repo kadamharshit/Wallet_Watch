@@ -106,7 +106,6 @@ class _BudgetTrackerState extends State<BudgetTracker> {
       } else if (mode == 'online') {
         online += amount;
       }
-      debugPrint("MODE:${b['mode']} AMOUNT:$amount");
     }
 
     setState(() {
@@ -146,6 +145,11 @@ class _BudgetTrackerState extends State<BudgetTracker> {
     final expenses = await DatabaseHelper.instance.getExpenses(
       Supabase.instance.client.auth.currentUser!.id,
     );
+    final entryMonth = (entry['date'] ?? '').toString().substring(0, 7);
+
+    final monthExpenses = expenses.where((e) {
+      return (e['date'] ?? '').toString().startsWith(entryMonth);
+    }).toList();
 
     final controller = TextEditingController(text: entry['total'].toString());
 
@@ -164,7 +168,7 @@ class _BudgetTrackerState extends State<BudgetTracker> {
 
     Map<String, double> onlineUsedByBank = {};
 
-    for (final e in expenses) {
+    for (final e in monthExpenses) {
       final amount = (e['total'] as num?)?.toDouble() ?? 0;
 
       if ((e['mode'] ?? '') == 'Cash') {
@@ -313,48 +317,6 @@ class _BudgetTrackerState extends State<BudgetTracker> {
                             newCashBudget += value;
                           } else {
                             newOnlineBudget += value;
-                          }
-
-                          // CASH VALIDATION
-                          if (newCashBudget < cashUsed) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Cash budget cannot be less than used cash expenses",
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          // ONLINE VALIDATION
-                          if (newOnlineBudget < onlineUsed) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Online budget cannot be less than used online expenses",
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          // BANK VALIDATION
-                          if (selectedMode == 'Online') {
-                            final usedForBank =
-                                onlineUsedByBank[bankController.text.trim()] ??
-                                0;
-
-                            if (value < usedForBank) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    "${bankController.text} budget cannot be less than used expenses",
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
                           }
 
                           // SQLITE UPDATE

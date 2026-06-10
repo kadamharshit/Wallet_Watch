@@ -234,11 +234,14 @@ class _AddBudgetState extends State<AddBudget> {
       }
 
       if (saved) {
+        await SyncService.syncAll();
+
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Budget saved successfully ✅")),
         );
-        await SyncService.syncAll();
-        Navigator.pop(context);
+
+        Navigator.pop(context, true);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

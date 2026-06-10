@@ -23,7 +23,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   bool _isSaving = false;
 
-  String _selectedCategory = 'Grocery';
+  String? _selectedCategory;
   String _selectedPaymentMode = 'Cash';
 
   bool _showItemsSection = false;
@@ -57,11 +57,15 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     "Other",
   ];
 
+  final ScrollController _scrollController = ScrollController();
+
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
 
   final List<String> _paymentModes = ['Cash', 'Online'];
 
   List<Map<String, dynamic>> _recentTravels = [];
+
+  List<String> _shopSuggestions = [];
 
   final _travelModeController = TextEditingController();
   final _travelStartController = TextEditingController();
@@ -75,6 +79,11 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   final GlobalKey _shopKey = GlobalKey();
   final GlobalKey _itemsKey = GlobalKey();
   final GlobalKey _saveKey = GlobalKey();
+
+  final FocusNode _shopFocus = FocusNode();
+  final FocusNode _itemNameFocus = FocusNode();
+  final FocusNode _qtyFocus = FocusNode();
+  final FocusNode _amountFocus = FocusNode();
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addExpenseTourDoneKey =
@@ -92,6 +101,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     _fetchAvailableBanks();
     _syncPendingExpenses();
     _loadMostUsedTravels();
+    _loadShopSuggestions();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startAddExpenseTourOnlyOnce();
@@ -99,15 +109,24 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   //-------------------------Function for Loading Most Used Travel----------------------------
+
   Future<void> _loadMostUsedTravels() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
+
+    final now = DateTime.now();
 
     final expenses = await DatabaseHelper.instance.getExpenses(user.id);
 
     final Map<String, Map<String, dynamic>> freqMap = {};
 
     for (final e in expenses) {
+      final expenseDate = DateTime.tryParse((e['date'] ?? '').toString());
+
+      if (expenseDate == null) continue;
+
+      if (now.difference(expenseDate).inDays > 60) continue;
+
       if (e['category'] != 'Travel') continue;
 
       final raw = (e['items'] ?? '').toString();
@@ -126,20 +145,74 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             freqMap[key] = {'count': 1, 'expense': e, 'item': item};
           } else {
             freqMap[key]!['count']++;
+            // keep the most recent expense data for this route
+            final existingDate = (freqMap[key]!['expense']['date'] ?? '')
+                .toString();
+            final newDate = (e['date'] ?? '').toString();
+            if (newDate.compareTo(existingDate) > 0) {
+              freqMap[key]!['expense'] = e;
+              freqMap[key]!['item'] = item;
+            }
           }
         }
       } catch (_) {}
     }
 
-    final filtered = freqMap.values.where((e) => e['count'] >= 2).toList()
-      ..sort((a, b) => b['count'].compareTo(a['count']));
+    final sorted = freqMap.values.toList()
+      ..sort((a, b) {
+        final countDiff = b['count'].compareTo(a['count']);
+        if (countDiff != 0) return countDiff;
+        // tiebreak: most recently used first
+        final dateA = (a['expense']['date'] ?? '').toString();
+        final dateB = (b['expense']['date'] ?? '').toString();
+        return dateB.compareTo(dateA);
+      });
 
     setState(() {
-      _recentTravels = filtered.take(5).map<Map<String, dynamic>>((e) {
+      _recentTravels = sorted.take(5).map<Map<String, dynamic>>((e) {
         final exp = Map<String, dynamic>.from(e['expense']);
         exp['route_item'] = e['item'];
         return exp;
       }).toList();
+    });
+  }
+
+  Future<void> _loadShopSuggestions() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+
+    final expenses = await DatabaseHelper.instance.getExpenses(user.id);
+
+    final Map<String, int> shopCount = {};
+
+    for (final e in expenses) {
+      final expenseDate = DateTime.tryParse((e['date'] ?? '').toString());
+
+      if (expenseDate == null) continue;
+
+      // only last 60 days
+      if (now.difference(expenseDate).inDays > 60) continue;
+
+      // skip travel
+      if (e['category'] == 'Travel') continue;
+
+      // match current category
+      if (e['category'] != _selectedCategory) continue;
+
+      final shop = (e['shop'] ?? '').toString().trim();
+
+      if (shop.isEmpty) continue;
+
+      shopCount[shop] = (shopCount[shop] ?? 0) + 1;
+    }
+
+    final sorted = shopCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    setState(() {
+      _shopSuggestions = sorted.take(5).map((e) => e.key).toList();
     });
   }
 
@@ -190,7 +263,32 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     });
   }
 
-  void _addItem() => setState(() => itemInputs.add({}));
+  void _addItem() {
+    String defaultUnit = 'pcs';
+
+    if (_selectedCategory == 'Grocery') {
+      defaultUnit = 'kg';
+    }
+    setState(() {
+      itemInputs.add({
+        "name": "",
+        "qty": "",
+        "unit": defaultUnit,
+        "amount": "",
+      });
+    });
+
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+      );
+
+      FocusScope.of(context).requestFocus(_itemNameFocus);
+    });
+  }
 
   //--------------------HELPER-----------------------------------
   void _removeItem(int index) {
@@ -199,6 +297,24 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       itemInputs.removeAt(index);
       _updateTotal();
     });
+  }
+
+  IconData getTravelIcon(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'train':
+        return Icons.train;
+      case 'metro':
+        return Icons.subway;
+      case 'rickshaw':
+      case 'taxi':
+        return Icons.local_taxi;
+      case 'flight':
+        return Icons.flight;
+      case 'ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_bus;
+    }
   }
 
   void _updateTotal() {
@@ -417,6 +533,28 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     Navigator.pop(context, true);
   }
 
+  String getSuggestedUnit(String itemName) {
+    final text = itemName.toLowerCase();
+
+    if (text.contains('milk') ||
+        text.contains('oil') ||
+        text.contains('juice')) {
+      return 'L';
+    }
+
+    if (text.contains('rice') ||
+        text.contains('sugar') ||
+        text.contains('wheat')) {
+      return 'kg';
+    }
+
+    if (text.contains('shampoo') || text.contains('perfume')) {
+      return 'ml';
+    }
+
+    return 'pcs';
+  }
+
   //-------------------------------Date Picker-------------------------------
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -522,7 +660,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                   val == null || val.isEmpty ? "Select mode" : null,
               decoration: _pillDecoration(
                 hint: "Transport Mode",
-                icon: Icons.directions,
+
+                icon: getTravelIcon(_travelModeController.text),
               ),
             ),
             const SizedBox(height: 10),
@@ -554,7 +693,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 hint: "Amount",
                 icon: Icons.currency_rupee,
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
               onChanged: (val) {
                 item['amount'] = val;
                 _updateTotal();
@@ -575,12 +714,27 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             ),
           ] else ...[
             TextFormField(
+              focusNode: _itemNameFocus,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).requestFocus(_qtyFocus);
+              },
+              textInputAction: TextInputAction.next,
+              textCapitalization: TextCapitalization.words,
               decoration: _pillDecoration(
                 hint: "Item Name",
                 icon: Icons.shopping_bag_outlined,
               ),
               initialValue: item['name']?.toString(),
-              onChanged: (val) => item['name'] = val,
+              onChanged: (val) {
+                item['name'] = val;
+
+                // Auto suggest unit
+                if (item['unit'] == null || item['unit'] == 'pcs') {
+                  item['unit'] = getSuggestedUnit(val);
+                }
+
+                setState(() {});
+              },
               validator: (val) =>
                   val == null || val.isEmpty ? 'Enter item name' : null,
             ),
@@ -590,11 +744,18 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 Expanded(
                   flex: 2,
                   child: TextFormField(
+                    focusNode: _qtyFocus,
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_amountFocus);
+                    },
+                    textInputAction: TextInputAction.next,
                     decoration: _pillDecoration(
                       hint: "Qty",
                       icon: Icons.numbers,
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     initialValue: item['qty']?.toString(),
                     onChanged: (val) => item['qty'] = val,
                     validator: (val) =>
@@ -625,11 +786,16 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             ),
             const SizedBox(height: 10),
             TextFormField(
+              focusNode: _amountFocus,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).unfocus();
+              },
+              textInputAction: TextInputAction.done,
               decoration: _pillDecoration(
                 hint: "Amount",
                 icon: Icons.currency_rupee,
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
               initialValue: item['amount']?.toString(),
               onChanged: (val) {
                 item['amount'] = val;
@@ -711,456 +877,561 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  padding: const EdgeInsets.only(top: 6, bottom: 18),
-                  children: [
-                    Showcase(
-                      key: _dateKey,
-                      description: "Select the expense date",
-                      child: _sectionContainer(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Date",
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 10),
-                            InkWell(
-                              onTap: _pickDate,
-                              borderRadius: BorderRadius.circular(30),
-                              child: InputDecorator(
-                                decoration: _pillDecoration(
-                                  hint: "Select Date",
-                                  icon: Icons.calendar_today_outlined,
-                                ),
-                                child: Text(_selectedDate ?? "Select Date"),
+      body: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+        },
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.only(top: 6, bottom: 18),
+                    children: [
+                      Showcase(
+                        key: _dateKey,
+                        description: "Select the expense date",
+                        child: _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Date",
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    _sectionContainer(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Category & Payment",
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 10),
-
-                          Showcase(
-                            key: _categoryKey,
-                            description: "Choose expense category",
-                            child: DropdownButtonFormField(
-                              value: _selectedCategory,
-                              items: _categories
-                                  .map(
-                                    (c) => DropdownMenuItem(
-                                      value: c,
-                                      child: Text(c),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedCategory = value!;
-                                  total = 0.0;
-                                  _showItemsSection = true;
-
-                                  if (_selectedCategory == 'Travel') {
-                                    itemInputs = [
-                                      {
-                                        "mode": "",
-                                        "start": "",
-                                        "destination": "",
-                                        "amount": "",
-                                      },
-                                    ];
-                                    _travelModeController.clear();
-                                    _travelStartController.clear();
-                                    _travelDestController.clear();
-                                    _travelAmountController.clear();
-                                  } else {
-                                    itemInputs = [{}];
-                                  }
-                                });
-                              },
-                              decoration: _pillDecoration(
-                                hint: "Category",
-                                icon: Icons.category_outlined,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          Showcase(
-                            key: _paymentKey,
-                            description: "Select how you paid: Cash or Online",
-                            child: DropdownButtonFormField(
-                              value: _selectedPaymentMode,
-                              items: _paymentModes
-                                  .map(
-                                    (mode) => DropdownMenuItem(
-                                      value: mode,
-                                      child: Text(mode),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) async {
-                                setState(() {
-                                  _selectedPaymentMode = value!;
-                                  _showItemsSection = true;
-                                });
-
-                                if (_selectedPaymentMode == "Online") {
-                                  final done = await _secureStorage.read(
-                                    key: _addExpenseOnlineBankTourDoneKey,
-                                  );
-
-                                  if (done != "true") {
-                                    await _secureStorage.write(
-                                      key: _addExpenseOnlineBankTourDoneKey,
-                                      value: "true",
-                                    );
-
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                          if (!mounted) return;
-                                          ShowCaseWidget.of(
-                                            context,
-                                          ).startShowCase([_bankKey]);
-                                        });
-                                  }
-                                }
-                              },
-                              decoration: _pillDecoration(
-                                hint: "Paid By",
-                                icon: Icons.payments_outlined,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          if (_selectedPaymentMode == 'Online' &&
-                              _availableBanks.isNotEmpty)
-                            Showcase(
-                              key: _bankKey,
-                              description:
-                                  "Select the bank used for online payment",
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedBank,
-                                items: _availableBanks
-                                    .map(
-                                      (bank) => DropdownMenuItem(
-                                        value: bank,
-                                        child: Text(bank),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _selectedBank = val;
-                                  });
-                                },
-                                decoration: _pillDecoration(
-                                  hint: "Select Bank",
-                                  icon: Icons.account_balance_outlined,
+                              const SizedBox(height: 10),
+                              InkWell(
+                                onTap: _pickDate,
+                                borderRadius: BorderRadius.circular(30),
+                                child: InputDecorator(
+                                  decoration: _pillDecoration(
+                                    hint: "Select Date",
+                                    icon: Icons.calendar_today_outlined,
+                                  ),
+                                  child: Text(_selectedDate ?? "Select Date"),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    Showcase(
-                      key: _shopKey,
-                      description: "Enter shop name/type",
-                      child: _sectionContainer(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _selectedCategory == 'Travel'
-                                  ? "Travel Provider"
-                                  : "Shop Name / Type",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            TextFormField(
-                              controller: _shopController,
-                              decoration: _pillDecoration(
-                                hint: _selectedCategory == 'Travel'
-                                    ? "Travel Company (e.g. NMMT, Uber)"
-                                    : "Shop Name / Type",
-                                icon: _selectedCategory == 'Travel'
-                                    ? Icons.directions_bus
-                                    : Icons.storefront_outlined,
-                              ),
-                              validator: (value) =>
-                                  value!.isEmpty ? 'Enter shop name' : null,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    if (_selectedCategory == 'Travel' &&
-                        _recentTravels.isNotEmpty)
                       _sectionContainer(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              "Most Used Routes",
+                              "Category & Payment",
                               style: TextStyle(fontWeight: FontWeight.w700),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
 
-                            SizedBox(
-                              height: 85,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _recentTravels.length,
-                                itemBuilder: (context, index) {
-                                  final exp = _recentTravels[index];
-                                  final item = exp['route_item'];
-
-                                  if (item == null) {
-                                    return const SizedBox();
-                                  }
-
-                                  final provider = (exp['shop'] ?? '')
-                                      .toString();
-                                  final start = (item['start'] ?? '')
-                                      .toString();
-                                  final dest = (item['destination'] ?? '')
-                                      .toString();
-                                  final mode = (exp['mode'] ?? 'Cash')
-                                      .toString();
-
-                                  final bool isOnline =
-                                      mode.toLowerCase() == 'online';
-
-                                  final cardColor = isOnline
-                                      ? colorScheme.primary.withOpacity(0.15)
-                                      : Colors.green.withOpacity(0.15);
-
-                                  final borderColor = isOnline
-                                      ? colorScheme.primary
-                                      : Colors.green;
-
-                                  final iconColor = isOnline
-                                      ? colorScheme.primary
-                                      : Colors.green;
-
-                                  return GestureDetector(
-                                    onTap: () => _applyTravelTemplate(exp),
-                                    child: Container(
-                                      width: 220,
-                                      margin: const EdgeInsets.only(right: 10),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: cardColor,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(color: borderColor),
+                            Showcase(
+                              key: _categoryKey,
+                              description: "Choose expense category",
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedCategory,
+                                items: _categories
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c,
+                                        child: Text(c),
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.directions_bus,
-                                                size: 18,
-                                                color: iconColor,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  provider,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedCategory = value!;
+                                    _shopController.clear();
+                                    _shopSuggestions.clear();
 
-                                          const SizedBox(height: 8),
+                                    total = 0.0;
+                                    _showItemsSection = true;
+                                    _loadShopSuggestions();
 
-                                          Text(
-                                            "$start → $dest",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                    if (_selectedCategory == 'Travel') {
+                                      itemInputs = [
+                                        {
+                                          "mode": "",
+                                          "start": "",
+                                          "destination": "",
+                                          "amount": "",
+                                        },
+                                      ];
+                                      _travelModeController.clear();
+                                      _travelStartController.clear();
+                                      _travelDestController.clear();
+                                      _travelAmountController.clear();
+                                    } else {
+                                      String defaultUnit = 'pcs';
+
+                                      if (_selectedCategory == 'Grocery') {
+                                        defaultUnit = 'kg';
+                                      }
+
+                                      itemInputs = [
+                                        {
+                                          "name": "",
+                                          "qty": "",
+                                          "unit": defaultUnit,
+                                          "amount": "",
+                                        },
+                                      ];
+                                    }
+                                  });
                                 },
+                                decoration: _pillDecoration(
+                                  hint: "Select Category",
+                                  icon: Icons.category_outlined,
+                                ),
+                                validator: (value) =>
+                                    value == null ? 'Select category' : null,
                               ),
                             ),
+
+                            const SizedBox(height: 12),
+
+                            Showcase(
+                              key: _paymentKey,
+                              description:
+                                  "Select how you paid: Cash or Online",
+                              child: DropdownButtonFormField(
+                                value: _selectedPaymentMode,
+                                items: _paymentModes
+                                    .map(
+                                      (mode) => DropdownMenuItem(
+                                        value: mode,
+                                        child: Text(mode),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) async {
+                                  setState(() {
+                                    _selectedPaymentMode = value!;
+                                    _showItemsSection = true;
+                                  });
+
+                                  if (_selectedPaymentMode == "Online") {
+                                    final done = await _secureStorage.read(
+                                      key: _addExpenseOnlineBankTourDoneKey,
+                                    );
+
+                                    if (done != "true") {
+                                      await _secureStorage.write(
+                                        key: _addExpenseOnlineBankTourDoneKey,
+                                        value: "true",
+                                      );
+
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                            if (!mounted) return;
+                                            ShowCaseWidget.of(
+                                              context,
+                                            ).startShowCase([_bankKey]);
+                                          });
+                                    }
+                                  }
+                                },
+                                decoration: _pillDecoration(
+                                  hint: "Paid By",
+                                  icon: Icons.payments_outlined,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            if (_selectedPaymentMode == 'Online' &&
+                                _availableBanks.isNotEmpty)
+                              Showcase(
+                                key: _bankKey,
+                                description:
+                                    "Select the bank used for online payment",
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedBank,
+                                  items: _availableBanks
+                                      .map(
+                                        (bank) => DropdownMenuItem(
+                                          value: bank,
+                                          child: Text(bank),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _selectedBank = val;
+                                    });
+                                  },
+                                  decoration: _pillDecoration(
+                                    hint: "Select Bank",
+                                    icon: Icons.account_balance_outlined,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
 
-                    if (_showItemsSection)
                       Showcase(
-                        key: _itemsKey,
-                        description:
-                            "Add item details and auto calculate total",
+                        key: _shopKey,
+                        description: "Enter shop name/type",
                         child: _sectionContainer(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 _selectedCategory == 'Travel'
-                                    ? "Trip Details"
-                                    : "Items",
+                                    ? "Travel Provider"
+                                    : "Shop Name / Type",
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 10),
+                              TextFormField(
+                                controller: _shopController,
+                                focusNode: _shopFocus,
+                                onFieldSubmitted: (_) {
+                                  FocusScope.of(
+                                    context,
+                                  ).requestFocus(_itemNameFocus);
+                                },
+                                textCapitalization: TextCapitalization.words,
+                                textInputAction: TextInputAction.next,
 
-                              ...List.generate(
-                                itemInputs.length,
-                                (index) => _buildItemFields(index),
+                                decoration: _pillDecoration(
+                                  hint: _selectedCategory == 'Travel'
+                                      ? "Travel Company (e.g. NMMT, Uber)"
+                                      : "Shop Name / Type",
+                                  icon: _selectedCategory == 'Travel'
+                                      ? Icons.directions_bus
+                                      : Icons.storefront_outlined,
+                                ),
+                                validator: (value) =>
+                                    value!.isEmpty ? 'Enter shop name' : null,
                               ),
+                              if (_selectedCategory != null &&
+                                  _selectedCategory != 'Travel' &&
+                                  _shopSuggestions.isNotEmpty) ...[
+                                const SizedBox(height: 14),
 
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primary.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: colorScheme.primary.withOpacity(0.3),
+                                Text(
+                                  "Recent Shops",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Text(
-                                      "Total",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
+
+                                const SizedBox(height: 10),
+
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: _shopSuggestions.map((shop) {
+                                    return ActionChip(
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
                                       ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      "₹${total.toStringAsFixed(2)}",
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ],
+                                      label: Text(shop),
+                                      onPressed: () {
+                                        setState(() {
+                                          _shopController.text = shop;
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
                                 ),
-                              ),
+                              ] else if (_selectedCategory != null &&
+                                  _selectedCategory != 'Travel') ...[
+                                const SizedBox(height: 12),
 
-                              const SizedBox(height: 12),
-
-                              if (_selectedCategory != 'Travel')
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 48,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _addItem,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text(
-                                      "Add Another Item",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: colorScheme.primary,
-                                      side: BorderSide(
-                                        color: colorScheme.primary,
-                                        width: 1.3,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(30),
-                                      ),
-                                    ),
+                                Text(
+                                  "Recent shops will appear here",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
+                              ],
                             ],
                           ),
                         ),
                       ),
 
-                    const SizedBox(height: 6),
-
-                    Showcase(
-                      key: _saveKey,
-                      description: "Finally tap here to save the expense",
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 52,
-
-                          child: ElevatedButton(
-                            onPressed: _isSaving ? null : _saveExpense,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: colorScheme.primary,
-                              foregroundColor: colorScheme.onPrimary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
+                      if (_selectedCategory == 'Travel' &&
+                          _recentTravels.isNotEmpty)
+                        _sectionContainer(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Most Used Routes",
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
-                            ),
-                            child: _isSaving
-                                ? SizedBox(
-                                    height: 22,
-                                    width: 22,
+                              const SizedBox(height: 12),
 
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.surface,
-                                    ),
-                                  )
-                                : Text(
-                                    "Save Expense",
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                              SizedBox(
+                                height: 85,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _recentTravels.length,
+                                  itemBuilder: (context, index) {
+                                    final exp = _recentTravels[index];
+                                    final item = exp['route_item'];
+
+                                    if (item == null) {
+                                      return const SizedBox();
+                                    }
+
+                                    final provider = (exp['shop'] ?? '')
+                                        .toString();
+                                    final start = (item['start'] ?? '')
+                                        .toString();
+                                    final dest = (item['destination'] ?? '')
+                                        .toString();
+                                    final mode = (exp['mode'] ?? 'Cash')
+                                        .toString();
+
+                                    final bool isOnline =
+                                        mode.toLowerCase() == 'online';
+
+                                    final cardColor = isOnline
+                                        ? colorScheme.primary.withOpacity(0.15)
+                                        : Colors.green.withOpacity(0.15);
+
+                                    final borderColor = isOnline
+                                        ? colorScheme.primary
+                                        : Colors.green;
+
+                                    final iconColor = isOnline
+                                        ? colorScheme.primary
+                                        : Colors.green;
+
+                                    return GestureDetector(
+                                      onTap: () => _applyTravelTemplate(exp),
+                                      child: Container(
+                                        width: 220,
+                                        margin: const EdgeInsets.only(
+                                          right: 10,
+                                        ),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: cardColor,
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: borderColor,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  getTravelIcon(
+                                                    item['mode']?.toString() ??
+                                                        '',
+                                                  ),
+                                                  size: 18,
+                                                  color: iconColor,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    provider,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+
+                                            const SizedBox(height: 8),
+
+                                            Text(
+                                              "$start → $dest",
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (_selectedCategory == 'Travel')
+                        _sectionContainer(
+                          child: Text(
+                            "Your frequent routes will appear here",
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+
+                      if (_showItemsSection)
+                        Showcase(
+                          key: _itemsKey,
+                          description:
+                              "Add item details and auto calculate total",
+                          child: _sectionContainer(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedCategory == 'Travel'
+                                      ? "Trip Details"
+                                      : "Items",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                ...List.generate(
+                                  itemInputs.length,
+                                  (index) => _buildItemFields(index),
+                                ),
+
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withOpacity(0.4),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: colorScheme.primary.withOpacity(
+                                        0.3,
+                                      ),
                                     ),
                                   ),
+                                  child: Row(
+                                    children: [
+                                      const Text(
+                                        "Total",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        "₹${total.toStringAsFixed(2)}",
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                if (_selectedCategory != 'Travel')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 48,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _addItem,
+                                      icon: const Icon(Icons.add),
+                                      label: const Text(
+                                        "Add Another Item",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: colorScheme.primary,
+                                        side: BorderSide(
+                                          color: colorScheme.primary,
+                                          width: 1.3,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            30,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      const SizedBox(height: 6),
+
+                      Showcase(
+                        key: _saveKey,
+                        description: "Finally tap here to save the expense",
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 52,
+
+                            child: ElevatedButton(
+                              onPressed: _isSaving ? null : _saveExpense,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.primary,
+                                foregroundColor: colorScheme.onPrimary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                              child: _isSaving
+                                  ? SizedBox(
+                                      height: 22,
+                                      width: 22,
+
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.surface,
+                                      ),
+                                    )
+                                  : Text(
+                                      "Save Expense",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1173,6 +1444,11 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     _travelStartController.dispose();
     _travelDestController.dispose();
     _travelAmountController.dispose();
+    _shopFocus.dispose();
+    _itemNameFocus.dispose();
+    _qtyFocus.dispose();
+    _amountFocus.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 }
