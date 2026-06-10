@@ -1,3 +1,4 @@
+import 'package:shimmer/shimmer.dart';
 import 'package:walletwatch/features/settings/transfer_tracker.dart';
 import 'package:walletwatch/services/sync_service.dart';
 
@@ -38,6 +39,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isAmountVisible = false;
 
+  bool _isLoadingHome = true;
+
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -60,20 +63,35 @@ class _HomeScreenState extends State<HomeScreen> {
       _onlineBudget - _onlineExpense + _onlineTransferAdjustment;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
 
-  double get _cashProgress =>
-      _cashBudget <= 0 ? 0.0 : (_cashExpense / _cashBudget).clamp(0.0, 1.0);
+  double get _cashProgress {
+    final effectiveBudget = _cashBudget + _cashTransferAdjustment;
 
-  double get _onlineProgress => _onlineBudget <= 0
-      ? 0.0
-      : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
+    return effectiveBudget <= 0
+        ? 0.0
+        : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
+  }
+
+  double get _onlineProgress {
+    final effectiveBudget = _onlineBudget + _onlineTransferAdjustment;
+
+    return effectiveBudget <= 0
+        ? 0.0
+        : (_onlineExpense / effectiveBudget).clamp(0.0, 1.0);
+  }
 
   Color _amountColor(double value) =>
       value >= 0 ? colorScheme.secondary : colorScheme.error;
 
   String _formatPercent(double used, double total) {
     if (total <= 0) return "No budget set";
-    final percent = (used / total * 100).clamp(0, 999).toStringAsFixed(0);
-    return "$percent% of budget used";
+
+    final percent = (used / total) * 100;
+
+    if (percent > 100) {
+      return "${percent.toStringAsFixed(0)}% used (Over Budget)";
+    }
+
+    return "${percent.toStringAsFixed(0)}% of budget used";
   }
 
   // ---------------- Lifecycle ----------------
@@ -89,16 +107,27 @@ class _HomeScreenState extends State<HomeScreen> {
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      final isEmpty = await DatabaseHelper.instance.isLocalDatabaseEmpty();
-
-      await SyncService.syncAll();
-
+      // Load local SQLite data first (fast)
       await _loadUserInfo();
-      await _loadBudgetsSeparately();
-      await _loadExpensesSeparately();
-      await _loadTransferAdjustments();
+
+      await Future.wait([
+        _loadBudgetsSeparately(),
+        _loadExpensesSeparately(),
+        _loadTransferAdjustments(),
+      ]);
 
       if (!mounted) return;
+
+      setState(() {
+        _isLoadingHome = false;
+      });
+
+      // Sync with cloud in background
+      SyncService.syncAll().then((_) async {
+        if (!mounted) return;
+
+        await _refreshAll();
+      });
 
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -109,6 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       debugPrint("Home init error: $e");
+
+      if (mounted) {
+        setState(() {
+          _isLoadingHome = false;
+        });
+      }
     }
   }
 
@@ -119,73 +154,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isAmountVisible = value == "true";
     });
-  }
-
-  //-------------------------Function to sync supabase to sqlite---------------------------
-  Future<void> _syncFromSupabase(String userId) async {
-    try {
-      // Fetch budgets
-      final budgets = await supabase
-          .from('budgets')
-          .select()
-          .eq('user_id', userId);
-
-      for (final b in budgets) {
-        await DatabaseHelper.instance.insertBudget({
-          'uuid': b['uuid'],
-          'user_id': userId,
-          'date': b['date'],
-          'mode': b['mode'],
-          'total': b['total'],
-          'bank': b['bank'] ?? '',
-          'synced': 1,
-          'supabase_id': b['id'],
-        });
-      }
-
-      //  Fetch expenses
-      final expenses = await supabase
-          .from('expenses')
-          .select()
-          .eq('user_id', userId);
-
-      for (final e in expenses) {
-        await DatabaseHelper.instance.insertExpense({
-          'uuid': e['uuid'],
-          'user_id': userId,
-          'date': e['date'],
-          'shop': e['shop'],
-          'category': e['category'],
-          'items': e['items'],
-          'total': e['total'],
-          'mode': e['mode'],
-          'bank': e['bank'],
-          'synced': 1,
-          'supabase_id': e['id'],
-        });
-      }
-      final transfers = await supabase
-          .from('transfers')
-          .select()
-          .eq('user_id', userId);
-
-      for (final t in transfers) {
-        await DatabaseHelper.instance.insertTransfer({
-          'uuid': t['uuid'],
-          'user_id': t['user_id'],
-          'from_type': t['from_type'],
-          'to_type': t['to_type'],
-          'from_bank': t['from_bank'],
-          'to_bank': t['to_bank'],
-          'amount': t['amount'],
-          'date': t['date'],
-          'synced': 1,
-          'supabase_id': t['id'],
-        });
-      }
-    } catch (e) {
-      debugPrint("Sync error: $e");
-    }
   }
 
   // ---------------- Loaders ----------------
@@ -382,9 +350,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   //--------------Refresh--------------------
   Future<void> _refreshAll() async {
-    await _loadBudgetsSeparately();
-    await _loadExpensesSeparately();
-    await _loadTransferAdjustments();
+    await Future.wait([
+      _loadBudgetsSeparately(),
+      _loadExpensesSeparately(),
+      _loadTransferAdjustments(),
+    ]);
     //await _loadShoppingList();
   }
 
@@ -567,18 +537,35 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  children: [
-                    _buildTotalRemainingCard(),
+                child: _isLoadingHome
+                    ? _buildHomeSkeleton()
+                    : Column(
+                        children: [
+                          if ((_cashBudget + _onlineBudget) == 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              child: _buildNoBudgetCard(),
+                            )
+                          else ...[
+                            _buildTotalRemainingCard(),
 
-                    const SizedBox(height: 8),
-                    _buildPieCard(),
-                    _buildRemainingRow(),
-                    const SizedBox(height: 8),
-                    _buildBottomButtons(),
-                    const SizedBox(height: 18),
-                  ],
-                ),
+                            const SizedBox(height: 8),
+
+                            _buildPieCard(),
+
+                            _buildRemainingRow(),
+                          ],
+
+                          const SizedBox(height: 8),
+
+                          _buildBottomButtons(),
+
+                          const SizedBox(height: 18),
+                        ],
+                      ),
               ),
             ),
           ],
@@ -720,7 +707,10 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.money,
               amount: _cashRemaining,
               progress: _cashProgress,
-              percentText: _formatPercent(_cashExpense, _cashBudget),
+              percentText: _formatPercent(
+                _cashExpense,
+                _cashBudget + _cashTransferAdjustment,
+              ),
               color: colorScheme.secondary,
               margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
             ),
@@ -735,13 +725,79 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.account_balance_wallet_outlined,
               amount: _onlineRemaining,
               progress: _onlineProgress,
-              percentText: _formatPercent(_onlineExpense, _onlineBudget),
+              percentText: _formatPercent(
+                _onlineExpense,
+                _onlineBudget + _onlineTransferAdjustment,
+              ),
               color: colorScheme.primary,
               margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNoBudgetCard() {
+    final monthName = DateFormat('MMMM yyyy').format(DateTime.now());
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 42,
+            color: Colors.orange,
+          ),
+
+          const SizedBox(height: 10),
+
+          Text(
+            "No Budget Added",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            "You haven't added a budget for $monthName yet.",
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+            (_cashExpense + _onlineExpense) > 0
+                ? "Expenses are recorded, but remaining balance will be available after setting a budget."
+                : "Add a budget to start tracking this month's spending.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushNamed(context, '/budget');
+            },
+            icon: const Icon(Icons.add),
+            label: const Text("Add Budget"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -802,7 +858,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   onPressed: () async {
                     await Navigator.pushNamed(context, '/budget');
-                    _loadBudgetsSeparately();
+                    await _refreshAll();
                   },
                 ),
               ),
@@ -867,6 +923,50 @@ class _HomeScreenState extends State<HomeScreen> {
             // ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _skeletonBox({required double height}) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Container(
+        height: height,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeSkeleton() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _skeletonBox(height: 110),
+          const SizedBox(height: 16),
+
+          _skeletonBox(height: 320),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(child: _skeletonBox(height: 150)),
+              const SizedBox(width: 12),
+              Expanded(child: _skeletonBox(height: 150)),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          _skeletonBox(height: 52),
+          const SizedBox(height: 12),
+          _skeletonBox(height: 52),
+        ],
       ),
     );
   }
