@@ -63,20 +63,35 @@ class _HomeScreenState extends State<HomeScreen> {
       _onlineBudget - _onlineExpense + _onlineTransferAdjustment;
   double get _totalRemaining => _cashRemaining + _onlineRemaining;
 
-  double get _cashProgress =>
-      _cashBudget <= 0 ? 0.0 : (_cashExpense / _cashBudget).clamp(0.0, 1.0);
+  double get _cashProgress {
+    final effectiveBudget = _cashBudget + _cashTransferAdjustment;
 
-  double get _onlineProgress => _onlineBudget <= 0
-      ? 0.0
-      : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
+    return effectiveBudget <= 0
+        ? 0.0
+        : (_onlineExpense / _onlineBudget).clamp(0.0, 1.0);
+  }
+
+  double get _onlineProgress {
+    final effectiveBudget = _onlineBudget + _onlineTransferAdjustment;
+
+    return effectiveBudget <= 0
+        ? 0.0
+        : (_onlineExpense / effectiveBudget).clamp(0.0, 1.0);
+  }
 
   Color _amountColor(double value) =>
       value >= 0 ? colorScheme.secondary : colorScheme.error;
 
   String _formatPercent(double used, double total) {
     if (total <= 0) return "No budget set";
-    final percent = (used / total * 100).clamp(0, 999).toStringAsFixed(0);
-    return "$percent% of budget used";
+
+    final percent = (used / total) * 100;
+
+    if (percent > 100) {
+      return "${percent.toStringAsFixed(0)}% used (Over Budget)";
+    }
+
+    return "${percent.toStringAsFixed(0)}% of budget used";
   }
 
   // ---------------- Lifecycle ----------------
@@ -692,7 +707,10 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.money,
               amount: _cashRemaining,
               progress: _cashProgress,
-              percentText: _formatPercent(_cashExpense, _cashBudget),
+              percentText: _formatPercent(
+                _cashExpense,
+                _cashBudget + _cashTransferAdjustment,
+              ),
               color: colorScheme.secondary,
               margin: const EdgeInsets.fromLTRB(16, 8, 8, 8),
             ),
@@ -707,7 +725,10 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.account_balance_wallet_outlined,
               amount: _onlineRemaining,
               progress: _onlineProgress,
-              percentText: _formatPercent(_onlineExpense, _onlineBudget),
+              percentText: _formatPercent(
+                _onlineExpense,
+                _onlineBudget + _onlineTransferAdjustment,
+              ),
               color: colorScheme.primary,
               margin: const EdgeInsets.fromLTRB(8, 8, 16, 8),
             ),
