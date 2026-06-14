@@ -81,9 +81,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   final GlobalKey _saveKey = GlobalKey();
 
   final FocusNode _shopFocus = FocusNode();
-  final FocusNode _itemNameFocus = FocusNode();
-  final FocusNode _qtyFocus = FocusNode();
-  final FocusNode _amountFocus = FocusNode();
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _addExpenseTourDoneKey =
@@ -285,8 +282,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOut,
       );
-
-      FocusScope.of(context).requestFocus(_itemNameFocus);
     });
   }
 
@@ -536,9 +531,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   String getSuggestedUnit(String itemName) {
     final text = itemName.toLowerCase();
 
-    if (text.contains('milk') ||
-        text.contains('oil') ||
-        text.contains('juice')) {
+    if (text.contains('oil') || text.contains('juice')) {
       return 'L';
     }
 
@@ -548,7 +541,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       return 'kg';
     }
 
-    if (text.contains('shampoo') || text.contains('perfume')) {
+    if (text.contains('shampoo') ||
+        text.contains('perfume') ||
+        text.contains('milk')) {
       return 'ml';
     }
 
@@ -714,10 +709,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             ),
           ] else ...[
             TextFormField(
-              focusNode: _itemNameFocus,
-              onFieldSubmitted: (_) {
-                FocusScope.of(context).requestFocus(_qtyFocus);
-              },
               textInputAction: TextInputAction.next,
               textCapitalization: TextCapitalization.words,
               decoration: _pillDecoration(
@@ -744,10 +735,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 Expanded(
                   flex: 2,
                   child: TextFormField(
-                    focusNode: _qtyFocus,
-                    onFieldSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_amountFocus);
-                    },
                     textInputAction: TextInputAction.next,
                     decoration: _pillDecoration(
                       hint: "Qty",
@@ -786,10 +773,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             ),
             const SizedBox(height: 10),
             TextFormField(
-              focusNode: _amountFocus,
-              onFieldSubmitted: (_) {
-                FocusScope.of(context).unfocus();
-              },
               textInputAction: TextInputAction.done,
               decoration: _pillDecoration(
                 hint: "Amount",
@@ -1096,9 +1079,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                 controller: _shopController,
                                 focusNode: _shopFocus,
                                 onFieldSubmitted: (_) {
-                                  FocusScope.of(
-                                    context,
-                                  ).requestFocus(_itemNameFocus);
+                                  FocusScope.of(context).nextFocus();
                                 },
                                 textCapitalization: TextCapitalization.words,
                                 textInputAction: TextInputAction.next,
@@ -1445,9 +1426,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     _travelDestController.dispose();
     _travelAmountController.dispose();
     _shopFocus.dispose();
-    _itemNameFocus.dispose();
-    _qtyFocus.dispose();
-    _amountFocus.dispose();
+
     _scrollController.dispose();
     super.dispose();
   }

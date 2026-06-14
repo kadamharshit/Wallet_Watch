@@ -19,6 +19,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
   late String _dateString;
 
+  final ScrollController _scrollController = ScrollController();
+
   List<String> _availableBanks = [];
 
   ColorScheme get colorScheme => Theme.of(context).colorScheme;
@@ -206,8 +208,25 @@ class _EditExpensePageState extends State<EditExpensePage> {
           "amount": "",
         });
       } else {
-        itemInputs.add({"name": "", "qty": "", "unit": "pcs", "amount": ""});
+        String defaultUnit = _category == "Grocery" ? "kg" : "pcs";
+
+        itemInputs.add({
+          "name": "",
+          "qty": "",
+          "unit": defaultUnit,
+          "amount": "",
+        });
       }
+    });
+
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -353,6 +372,46 @@ class _EditExpensePageState extends State<EditExpensePage> {
     }
   }
 
+  String getSuggestedUnit(String itemName) {
+    final text = itemName.toLowerCase();
+
+    if (text.contains('oil') || text.contains('juice')) {
+      return 'L';
+    }
+
+    if (text.contains('rice') ||
+        text.contains('sugar') ||
+        text.contains('wheat')) {
+      return 'kg';
+    }
+
+    if (text.contains('shampoo') ||
+        text.contains('perfume') ||
+        text.contains('milk')) {
+      return 'ml';
+    }
+
+    return 'pcs';
+  }
+
+  IconData getTravelIcon(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'train':
+        return Icons.train;
+      case 'metro':
+        return Icons.subway;
+      case 'rickshaw':
+      case 'taxi':
+        return Icons.local_taxi;
+      case 'flight':
+        return Icons.flight;
+      case 'ferry':
+        return Icons.directions_boat;
+      default:
+        return Icons.directions_bus;
+    }
+  }
+
   //-----------------------------------------------UI-------------------------------------------
   InputDecoration _pillDecoration({
     required String hint,
@@ -482,13 +541,14 @@ class _EditExpensePageState extends State<EditExpensePage> {
               },
               decoration: _pillDecoration(
                 hint: "Transport Mode",
-                icon: Icons.directions_bus,
+                icon: getTravelIcon(item["mode"] ?? ""),
               ),
               validator: (val) =>
                   val == null || val.isEmpty ? "Select mode" : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
+              textCapitalization: TextCapitalization.words,
               initialValue: item["start"],
               decoration: _pillDecoration(
                 hint: "From",
@@ -500,6 +560,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
             ),
             const SizedBox(height: 10),
             TextFormField(
+              textCapitalization: TextCapitalization.words,
               initialValue: item["destination"],
               decoration: _pillDecoration(
                 hint: "To",
@@ -512,6 +573,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
             ),
             const SizedBox(height: 10),
             TextFormField(
+              key: ValueKey('travel_amount_$index'),
               initialValue: item["amount"],
               decoration: _pillDecoration(
                 hint: "Amount",
@@ -536,12 +598,23 @@ class _EditExpensePageState extends State<EditExpensePage> {
             ),
           ] else ...[
             TextFormField(
+              key: ValueKey('name_$index'),
               initialValue: item["name"],
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               decoration: _pillDecoration(
                 hint: "Item Name",
                 icon: Icons.shopping_bag_outlined,
               ),
-              onChanged: (val) => item["name"] = val,
+              onChanged: (val) {
+                item["name"] = val;
+
+                if (item["unit"] == null || item["unit"] == "pcs") {
+                  item["unit"] = getSuggestedUnit(val);
+                }
+
+                setState(() {});
+              },
               validator: (val) =>
                   val == null || val.trim().isEmpty ? "Enter item name" : null,
             ),
@@ -551,7 +624,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
                 Expanded(
                   flex: 2,
                   child: TextFormField(
+                    key: ValueKey('qty_$index'),
                     initialValue: item["qty"],
+                    textInputAction: TextInputAction.next,
                     decoration: _pillDecoration(
                       hint: "Qty",
                       icon: Icons.numbers,
@@ -596,7 +671,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
             ),
             const SizedBox(height: 10),
             TextFormField(
+              key: ValueKey('item_amount_$index'),
               initialValue: item["amount"],
+              textInputAction: TextInputAction.next,
               decoration: _pillDecoration(
                 hint: "Amount",
                 icon: Icons.currency_rupee,
@@ -646,6 +723,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
               child: Form(
                 key: _formKey,
                 child: ListView(
+                  controller: _scrollController,
+
                   padding: const EdgeInsets.only(top: 6, bottom: 18),
                   children: [
                     _sectionContainer(
@@ -679,6 +758,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
                           TextFormField(
                             controller: _shopController,
+                            textCapitalization: TextCapitalization.words,
                             decoration: _pillDecoration(
                               hint: _category == "Travel"
                                   ? "Travel Provider"
@@ -729,11 +809,16 @@ class _EditExpensePageState extends State<EditExpensePage> {
                                       // Switching FROM travel to others
                                       else if (previousCategory == "Travel" &&
                                           _category != "Travel") {
+                                        String defaultUnit =
+                                            _category == "Grocery"
+                                            ? "kg"
+                                            : "pcs";
+
                                         itemInputs = [
                                           {
                                             "name": "",
                                             "qty": "",
-                                            "unit": "pcs",
+                                            "unit": defaultUnit,
                                             "amount": "",
                                           },
                                         ];
