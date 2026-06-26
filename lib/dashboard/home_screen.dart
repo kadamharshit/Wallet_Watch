@@ -482,6 +482,55 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showBalanceBreakdown(String title, double remaining) {
+    final bool isCash = title.contains("Cash");
+
+    final budget = isCash ? _cashBudget : _onlineBudget;
+
+    final transfer = isCash
+        ? _cashTransferAdjustment
+        : _onlineTransferAdjustment;
+
+    final expense = isCash ? _cashExpense : _onlineExpense;
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "$title Details",
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _detailRow("Original Budget", budget, colorScheme.primary),
+              _detailRow(
+                transfer >= 0 ? "Transfer In" : "Transfer Out",
+                transfer,
+                transfer >= 0 ? colorScheme.secondary : colorScheme.error,
+              ),
+              _detailRow("Expenses", -expense, colorScheme.error),
+              const Divider(height: 32),
+              _detailRow(
+                "Remaining",
+                remaining,
+                remaining >= 0 ? colorScheme.secondary : colorScheme.error,
+                isBold: true,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   //----------------------------------UI---------------------
 
   @override
@@ -1032,7 +1081,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(Icons.info, "About Us", '/about'),
 
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
-            _drawerItem(Icons.money, "Manage Budget", '/budget_tracker'),
+            _drawerItem(Icons.money, "Budget Tracker", '/budget_tracker'),
             _drawerItem(Icons.sync_alt, "Transfer Tracker", "/transfer"),
             _drawerItem(Icons.bar_chart, "Reports", "/reports"),
             _drawerItem(Icons.download, "Export Report", "/export_report"),
@@ -1097,77 +1146,112 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required EdgeInsets margin,
   }) {
-    return Container(
-      margin: margin,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withOpacity(0.4)
-                : Colors.black.withOpacity(0.08),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () {
+        _showBalanceBreakdown(title, amount);
+      },
+      child: Container(
+        margin: margin,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withOpacity(0.4)
+                  : Colors.black.withOpacity(0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  height: 36,
+                  width: 36,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              hideAmount("₹ ${amount.toStringAsFixed(2)}"),
+              style: TextStyle(
+                color: _amountColor(amount),
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorScheme.outlineVariant),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  color: color,
+                  minHeight: 8,
+                  backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              percentText,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+            Text(
+              "Tap for Breakdown",
+              style: TextStyle(fontSize: 11, color: colorScheme.primary),
+            ),
+          ],
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _detailRow(
+    String title,
+    double amount,
+    Color color, {
+    bool isBold = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                height: 36,
-                width: 36,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
+          Text(title),
+          const Spacer(),
           Text(
-            hideAmount("₹ ${amount.toStringAsFixed(2)}"),
+            "${amount >= 0 ? '+' : '-'}₹${amount.abs().toStringAsFixed(2)}",
             style: TextStyle(
-              color: _amountColor(amount),
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: colorScheme.outlineVariant),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: progress,
-                color: color,
-                minHeight: 8,
-                backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            percentText,
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).textTheme.bodySmall?.color,
+              color: color,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              fontSize: isBold ? 18 : 16,
             ),
           ),
         ],

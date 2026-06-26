@@ -507,7 +507,8 @@ class _EditExpensePageState extends State<EditExpensePage> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
+        color: colorScheme.surfaceVariant.withOpacity(0.6),
+        border: Border.all(color: colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -516,7 +517,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
           Row(
             children: [
               Text(
-                isTravel ? "Trip" : "Item ${index + 1}",
+                isTravel ? "Trip Details" : "Item ${index + 1}",
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
@@ -550,8 +551,9 @@ class _EditExpensePageState extends State<EditExpensePage> {
             TextFormField(
               textCapitalization: TextCapitalization.words,
               initialValue: item["start"],
+              textInputAction: TextInputAction.next,
               decoration: _pillDecoration(
-                hint: "From",
+                hint: "Start",
                 icon: Icons.location_on_outlined,
               ),
               onChanged: (val) => item["start"] = val,
@@ -561,9 +563,10 @@ class _EditExpensePageState extends State<EditExpensePage> {
             const SizedBox(height: 10),
             TextFormField(
               textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               initialValue: item["destination"],
               decoration: _pillDecoration(
-                hint: "To",
+                hint: "Destination",
                 icon: Icons.flag_outlined,
               ),
               onChanged: (val) => item["destination"] = val,
@@ -575,6 +578,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
             TextFormField(
               key: ValueKey('travel_amount_$index'),
               initialValue: item["amount"],
+              textInputAction: TextInputAction.done,
               decoration: _pillDecoration(
                 hint: "Amount",
                 icon: Icons.currency_rupee,
@@ -758,6 +762,7 @@ class _EditExpensePageState extends State<EditExpensePage> {
 
                           TextFormField(
                             controller: _shopController,
+                            textInputAction: TextInputAction.next,
                             textCapitalization: TextCapitalization.words,
                             decoration: _pillDecoration(
                               hint: _category == "Travel"

@@ -654,7 +654,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               validator: (val) =>
                   val == null || val.isEmpty ? "Select mode" : null,
               decoration: _pillDecoration(
-                hint: "Transport Mode",
+                hint: "Select Transport Mode",
 
                 icon: getTravelIcon(_travelModeController.text),
               ),
@@ -662,6 +662,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             const SizedBox(height: 10),
             TextFormField(
               controller: _travelStartController,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               decoration: _pillDecoration(
                 hint: "Start",
                 icon: Icons.location_on_outlined,
@@ -673,6 +675,8 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             const SizedBox(height: 10),
             TextFormField(
               controller: _travelDestController,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
               decoration: _pillDecoration(
                 hint: "Destination",
                 icon: Icons.flag_outlined,
@@ -688,6 +692,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                 hint: "Amount",
                 icon: Icons.currency_rupee,
               ),
+              textInputAction: TextInputAction.done,
               keyboardType: TextInputType.numberWithOptions(decimal: true),
               onChanged: (val) {
                 item['amount'] = val;
@@ -745,8 +750,12 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                     ),
                     initialValue: item['qty']?.toString(),
                     onChanged: (val) => item['qty'] = val,
-                    validator: (val) =>
-                        val == null || val.isEmpty ? 'Enter qty' : null,
+                    validator: (val) {
+                      final qty = double.tryParse(val ?? "");
+                      if (qty == null || qty <= 0) {
+                        return "Qty must be greater than 0";
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
