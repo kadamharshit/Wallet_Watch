@@ -1079,7 +1079,6 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 6),
             _drawerItem(Icons.person, "My Profile", '/profiles'),
             _drawerItem(Icons.info, "About Us", '/about'),
-
             _drawerItem(Icons.wallet, "Expense Tracker", '/expense_tracker'),
             _drawerItem(Icons.money, "Budget Tracker", '/budget_tracker'),
             _drawerItem(Icons.sync_alt, "Transfer Tracker", "/transfer"),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:walletwatch/services/expense_database.dart';
@@ -25,6 +27,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final supabase = Supabase.instance.client;
 
+  StreamSubscription<AuthState>? _authSubscription;
+
+  bool _openedResetScreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      final event = data.event;
+
+      if (event == AuthChangeEvent.passwordRecovery) {
+        _openedResetScreen = true;
+        Navigator.pushNamed(context, '/reset_password');
+      }
+    });
+  }
+
   //----------------------Function for Login--------------------------------
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -36,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final email = _emailController.text.trim();
-      final password = _passwordController.text.trim();
+      final password = _passwordController.text;
 
       final authRes = await supabase.auth.signInWithPassword(
         email: email,
@@ -221,6 +243,121 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final parentContext = context;
+
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: parentContext,
+      builder: (dialogContext) {
+        bool isSending = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Forgot Password"),
+              content: Form(
+                key: formKey,
+                child: TextFormField(
+                  controller: controller,
+                  keyboardType: TextInputType.emailAddress,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: "Enter your email",
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return "Enter your email";
+                    }
+
+                    if (!RegExp(
+                      r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$',
+                    ).hasMatch(value.trim())) {
+                      return "Enter a valid email";
+                    }
+
+                    return null;
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSending
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+
+                  child: const Text("Cancel"),
+                ),
+
+                ElevatedButton(
+                  onPressed: isSending
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+
+                          setDialogState(() {
+                            isSending = true;
+                          });
+
+                          try {
+                            await supabase.auth.resetPasswordForEmail(
+                              controller.text.trim(),
+                              redirectTo: 'walletwatch://reset-password',
+                            );
+
+                            if (!mounted) return;
+
+                            Navigator.pop(dialogContext);
+
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Password reset link has been sent to your email.",
+                                ),
+                              ),
+                            );
+                          } on AuthException catch (e) {
+                            setDialogState(() {
+                              isSending = false;
+                            });
+
+                            ScaffoldMessenger.of(
+                              parentContext,
+                            ).showSnackBar(SnackBar(content: Text(e.message)));
+                          } catch (_) {
+                            setDialogState(() {
+                              isSending = false;
+                            });
+
+                            ScaffoldMessenger.of(parentContext).showSnackBar(
+                              const SnackBar(
+                                content: Text("Something went wrong."),
+                              ),
+                            );
+                          }
+                        },
+                  child: isSending
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text("Send Link"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -381,7 +518,27 @@ class _LoginScreenState extends State<LoginScreen> {
                               : null,
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
+
+                        Align(
+                          alignment: Alignment.center,
+                          child: TextButton(
+                            onPressed: _showForgotPasswordDialog,
+                            child: const Text("Reset Password"),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Text(
+                          "We'll send a password reset link to this email.",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+
                         //  ERROR MESSAGE
                         if (_errorMessage != null)
                           Padding(
@@ -463,6 +620,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _authSubscription?.cancel();
     super.dispose();
   }
 }

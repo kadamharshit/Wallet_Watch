@@ -21,6 +21,7 @@ import 'package:walletwatch/features/settings/budget_tracker.dart';
 import 'package:walletwatch/features/settings/edit_profile.dart';
 import 'package:walletwatch/features/settings/expense_tracker.dart';
 import 'package:walletwatch/features/settings/how_to_use.dart';
+import 'package:walletwatch/features/auth/reset_password_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +54,7 @@ class MyApp extends StatelessWidget {
 
       theme: lightTheme,
       darkTheme: darkTheme,
-      themeMode: context.watch<ThemeProvider>().themeMode,
+      themeMode: themeProvider.themeMode,
 
       initialRoute: '/',
       routes: {
@@ -69,8 +70,9 @@ class MyApp extends StatelessWidget {
         '/budget': (_) => const AddBudget(),
         '/reports': (_) => const ReportsPage(),
         '/add_expense': (_) => const AddManualExpense(),
-        "/export_report": (context) => const ExportReportPage(),
-        '/feedback': (context) => const FeedbackPage(),
+        '/export_report': (_) => const ExportReportPage(),
+        '/feedback': (_) => const FeedbackPage(),
+        '/reset_password': (_) => const ResetPasswordScreen(),
       },
     );
   }
