@@ -20,13 +20,14 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
   String? _selectedDate;
   final _shopController = TextEditingController();
+  final _amountController = TextEditingController();
 
   bool _isSaving = false;
 
   String? _selectedCategory;
   String _selectedPaymentMode = 'Cash';
 
-  bool _showItemsSection = false;
+  bool _showAdvanceDetails = false;
 
   final List<String> _units = ['pcs', 'kg', 'g', 'L', 'ml'];
   List<Map<String, dynamic>> itemInputs = [
@@ -70,7 +71,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   final _travelModeController = TextEditingController();
   final _travelStartController = TextEditingController();
   final _travelDestController = TextEditingController();
-  final _travelAmountController = TextEditingController();
 
   final GlobalKey _dateKey = GlobalKey();
   final GlobalKey _categoryKey = GlobalKey();
@@ -95,6 +95,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   @override
   void initState() {
     super.initState();
+    _selectedDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _fetchAvailableBanks();
     _syncPendingExpenses();
     _loadMostUsedTravels();
@@ -313,10 +314,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   }
 
   void _updateTotal() {
-    total = itemInputs.fold(0.0, (sum, i) {
-      final amt = double.tryParse(i['amount']?.toString() ?? '0') ?? 0;
-      return sum + amt;
-    });
+    total = double.tryParse(_amountController.text) ?? 0;
     setState(() {});
   }
 
@@ -389,7 +387,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           _travelModeController.text = (first['mode'] ?? '').toString();
           _travelStartController.text = (first['start'] ?? '').toString();
           _travelDestController.text = (first['destination'] ?? '').toString();
-          _travelAmountController.clear();
 
           itemInputs = [
             {
@@ -401,7 +398,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           ];
 
           total = 0.0;
-          _showItemsSection = true;
         });
       }
     } catch (e) {}
@@ -414,19 +410,20 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
-    if (total <= 0) {
+    final enteredAmount = double.tryParse(_amountController.text.trim()) ?? 0;
+    if (enteredAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Total must be greater than 0")),
+        const SnackBar(content: Text("Amount must be greater than 0")),
       );
       return;
     }
-    if (total > MAX_LIMIT) {
+    if (enteredAmount > MAX_LIMIT) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Total expense cannot exceed ₹2,00,000')),
+        const SnackBar(content: Text('Amount expense cannot exceed ₹2,00,000')),
       );
       return;
     }
-    if (total > WARNING_LIMIT) {
+    if (enteredAmount > WARNING_LIMIT) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -435,11 +432,35 @@ class _AddManualExpenseState extends State<AddManualExpense> {
         ),
       );
     }
-    setState(() => _isSaving = true);
+    if (_selectedCategory == 'Travel') {
+      final mode = _travelModeController.text.trim();
+      final start = _travelStartController.text.trim();
+      final destination = _travelDestController.text.trim();
+
+      if (mode.isEmpty || start.isEmpty || destination.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please enter transport mode, start and destination"),
+          ),
+        );
+
+        return;
+      }
+    }
 
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please log in again")));
+      return;
+    }
+    setState(() => _isSaving = true);
 
     final date =
         _selectedDate ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -448,27 +469,39 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     String itemsJsonString = "[]";
 
     if (_selectedCategory == "Travel") {
-      final travelItems = [
-        {
-          "mode": _travelModeController.text.trim(),
-          "start": _travelStartController.text.trim(),
-          "destination": _travelDestController.text.trim(),
-          "amount": double.tryParse(_travelAmountController.text.trim()) ?? 0.0,
-        },
-      ];
-      itemsJsonString = jsonEncode(travelItems);
-    } else {
-      final normalItems = itemInputs.map((i) {
-        return {
-          "name": (i["name"] ?? "").toString().trim(),
-          "qty": double.tryParse((i["qty"] ?? "0").toString().trim()) ?? 0.0,
-          "unit": (i["unit"] ?? "pcs").toString(),
-          "amount":
-              double.tryParse((i["amount"] ?? "0").toString().trim()) ?? 0.0,
-        };
-      }).toList();
+      final mode = _travelModeController.text.trim();
+      final start = _travelStartController.text.trim();
+      final destination = _travelDestController.text.trim();
 
-      itemsJsonString = jsonEncode(normalItems);
+      // Only save travel details if the user actually entered them.
+      if (mode.isNotEmpty || start.isNotEmpty || destination.isNotEmpty) {
+        final travelItems = [
+          {"mode": mode, "start": start, "destination": destination},
+        ];
+
+        itemsJsonString = jsonEncode(travelItems);
+      }
+    } else {
+      final normalItems = itemInputs
+          .where((i) {
+            final name = (i["name"] ?? "").toString().trim();
+            final qty = (i["qty"] ?? "").toString().trim();
+
+            return name.isNotEmpty || qty.isNotEmpty;
+          })
+          .map((i) {
+            return {
+              "name": (i["name"] ?? "").toString().trim(),
+              "qty":
+                  double.tryParse((i["qty"] ?? "0").toString().trim()) ?? 0.0,
+              "unit": (i["unit"] ?? "pcs").toString(),
+            };
+          })
+          .toList();
+
+      if (normalItems.isNotEmpty) {
+        itemsJsonString = jsonEncode(normalItems);
+      }
     }
 
     final localExpense = {
@@ -478,7 +511,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
       'shop': _shopController.text.trim(),
       'category': _selectedCategory,
       'items': itemsJsonString,
-      'total': total,
+      'total': enteredAmount,
       'mode': _selectedPaymentMode,
       'bank': _selectedPaymentMode == 'Online' ? (_selectedBank ?? '') : '',
       'synced': 0,
@@ -498,7 +531,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               'shop': localExpense['shop'],
               'category': localExpense['category'],
               'items': localExpense['items'],
-              'total': total,
+              'total': enteredAmount,
               'mode': localExpense['mode'],
               'bank': localExpense['bank'].toString().isNotEmpty
                   ? localExpense['bank']
@@ -554,7 +587,9 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _selectedDate != null
+          ? DateTime.parse(_selectedDate!)
+          : DateTime.now(),
       firstDate: DateTime(2022),
       lastDate: DateTime(2100),
     );
@@ -685,33 +720,33 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               validator: (val) =>
                   val == null || val.isEmpty ? 'Enter destination' : null,
             ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _travelAmountController,
-              decoration: _pillDecoration(
-                hint: "Amount",
-                icon: Icons.currency_rupee,
-              ),
-              textInputAction: TextInputAction.done,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              onChanged: (val) {
-                item['amount'] = val;
-                _updateTotal();
-              },
-              validator: (val) {
-                final amt = double.tryParse(val ?? '');
+            // const SizedBox(height: 10),
+            // TextFormField(
+            //   controller: _travelAmountController,
+            //   decoration: _pillDecoration(
+            //     hint: "Amount",
+            //     icon: Icons.currency_rupee,
+            //   ),
+            //   textInputAction: TextInputAction.done,
+            //   keyboardType: TextInputType.numberWithOptions(decimal: true),
+            //   onChanged: (val) {
+            //     item['amount'] = val;
+            //     _updateTotal();
+            //   },
+            //   validator: (val) {
+            //     final amt = double.tryParse(val ?? '');
 
-                if (amt == null || amt <= 0) {
-                  return 'Enter valid amount';
-                }
+            //     if (amt == null || amt <= 0) {
+            //       return 'Enter valid amount';
+            //     }
 
-                if (amt > MAX_LIMIT) {
-                  return 'Max ₹2,00,000 allowed';
-                }
+            //     if (amt > MAX_LIMIT) {
+            //       return 'Max ₹2,00,000 allowed';
+            //     }
 
-                return null;
-              },
-            ),
+            //     return null;
+            //   },
+            // ),
           ] else ...[
             TextFormField(
               textInputAction: TextInputAction.next,
@@ -781,32 +816,32 @@ class _AddManualExpenseState extends State<AddManualExpense> {
               ],
             ),
             const SizedBox(height: 10),
-            TextFormField(
-              textInputAction: TextInputAction.done,
-              decoration: _pillDecoration(
-                hint: "Amount",
-                icon: Icons.currency_rupee,
-              ),
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              initialValue: item['amount']?.toString(),
-              onChanged: (val) {
-                item['amount'] = val;
-                _updateTotal();
-              },
-              validator: (val) {
-                final amt = double.tryParse(val ?? '');
+            // TextFormField(
+            //   textInputAction: TextInputAction.done,
+            //   decoration: _pillDecoration(
+            //     hint: "Amount",
+            //     icon: Icons.currency_rupee,
+            //   ),
+            //   keyboardType: TextInputType.numberWithOptions(decimal: true),
+            //   initialValue: item['amount']?.toString(),
+            //   onChanged: (val) {
+            //     item['amount'] = val;
+            //     _updateTotal();
+            //   },
+            //   validator: (val) {
+            //     final amt = double.tryParse(val ?? '');
 
-                if (amt == null || amt <= 0) {
-                  return 'Enter valid amount';
-                }
+            //     if (amt == null || amt <= 0) {
+            //       return 'Enter valid amount';
+            //     }
 
-                if (amt > MAX_LIMIT) {
-                  return 'Max ₹2,00,000 allowed';
-                }
+            //     if (amt > MAX_LIMIT) {
+            //       return 'Max ₹2,00,000 allowed';
+            //     }
 
-                return null;
-              },
-            ),
+            //     return null;
+            //   },
+            // ),
           ],
         ],
       ),
@@ -884,31 +919,41 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                     controller: _scrollController,
                     padding: const EdgeInsets.only(top: 6, bottom: 18),
                     children: [
-                      Showcase(
-                        key: _dateKey,
-                        description: "Select the expense date",
-                        child: _sectionContainer(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                "Date",
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 10),
-                              InkWell(
-                                onTap: _pickDate,
-                                borderRadius: BorderRadius.circular(30),
-                                child: InputDecorator(
-                                  decoration: _pillDecoration(
-                                    hint: "Select Date",
-                                    icon: Icons.calendar_today_outlined,
+                      _sectionContainer(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Amount",
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _amountController,
+                              onChanged: (_) => _updateTotal(),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
                                   ),
-                                  child: Text(_selectedDate ?? "Select Date"),
-                                ),
+                              decoration: _pillDecoration(
+                                hint: "Enter Amount",
+                                icon: Icons.currency_rupee,
                               ),
-                            ],
-                          ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return "Enter amount";
+                                }
+
+                                final amt = double.tryParse(value);
+
+                                if (amt == null || amt <= 0) {
+                                  return "Enter valid amount";
+                                }
+
+                                return null;
+                              },
+                            ),
+                          ],
                         ),
                       ),
 
@@ -942,7 +987,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                     _shopSuggestions.clear();
 
                                     total = 0.0;
-                                    _showItemsSection = true;
                                     _loadShopSuggestions();
 
                                     if (_selectedCategory == 'Travel') {
@@ -951,13 +995,12 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                           "mode": "",
                                           "start": "",
                                           "destination": "",
-                                          "amount": "",
                                         },
                                       ];
+
                                       _travelModeController.clear();
                                       _travelStartController.clear();
                                       _travelDestController.clear();
-                                      _travelAmountController.clear();
                                     } else {
                                       String defaultUnit = 'pcs';
 
@@ -970,7 +1013,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                           "name": "",
                                           "qty": "",
                                           "unit": defaultUnit,
-                                          "amount": "",
                                         },
                                       ];
                                     }
@@ -1004,7 +1046,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                 onChanged: (value) async {
                                   setState(() {
                                     _selectedPaymentMode = value!;
-                                    _showItemsSection = true;
+                                    //_showItemsSection = true;
                                   });
 
                                   if (_selectedPaymentMode == "Online") {
@@ -1155,6 +1197,35 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                           ),
                         ),
                       ),
+                      if (_selectedCategory == 'Travel')
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Showcase(
+                            key: _itemsKey,
+                            description:
+                                "Travel details are required: select transport mode, start and destination.",
+                            child: _sectionContainer(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Trip Details",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 12),
+
+                                  _buildItemFields(0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
 
                       if (_selectedCategory == 'Travel' &&
                           _recentTravels.isNotEmpty)
@@ -1281,97 +1352,115 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                             ),
                           ),
                         ),
-
-                      if (_showItemsSection)
-                        Showcase(
-                          key: _itemsKey,
-                          description:
-                              "Add item details and auto calculate total",
-                          child: _sectionContainer(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _selectedCategory == 'Travel'
-                                      ? "Trip Details"
-                                      : "Items",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-
-                                ...List.generate(
-                                  itemInputs.length,
-                                  (index) => _buildItemFields(index),
-                                ),
-
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primary.withOpacity(0.4),
-                                    borderRadius: BorderRadius.circular(18),
-                                    border: Border.all(
-                                      color: colorScheme.primary.withOpacity(
-                                        0.3,
+                      ExpansionTile(
+                        title: const Text(
+                          "Add More Details",
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onExpansionChanged: (value) {
+                          setState(() {
+                            _showAdvanceDetails = value;
+                          });
+                        },
+                        children: [
+                          // --------------------------------------------------
+                          // DATE - available for every category
+                          // --------------------------------------------------
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Showcase(
+                              key: _dateKey,
+                              description:
+                                  "Your expense date is set to today. Tap here if you want to change it.",
+                              child: _sectionContainer(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Date",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Text(
-                                        "Total",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
+                                    const SizedBox(height: 10),
+
+                                    InkWell(
+                                      onTap: _pickDate,
+                                      borderRadius: BorderRadius.circular(30),
+                                      child: InputDecorator(
+                                        decoration: _pillDecoration(
+                                          hint: "Select Date",
+                                          icon: Icons.calendar_today_outlined,
+                                        ),
+                                        child: Text(
+                                          _selectedDate ?? "Select Date",
                                         ),
                                       ),
-                                      const Spacer(),
-                                      Text(
-                                        "₹${total.toStringAsFixed(2)}",
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold,
-                                          color: colorScheme.primary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                            ),
+                          ),
 
-                                const SizedBox(height: 12),
-
-                                if (_selectedCategory != 'Travel')
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 48,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _addItem,
-                                      icon: const Icon(Icons.add),
-                                      label: const Text(
-                                        "Add Another Item",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                          // --------------------------------------------------
+                          // GROCERY ITEM DETAILS - optional
+                          // --------------------------------------------------
+                          if (_selectedCategory == 'Grocery')
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                              child: _sectionContainer(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Item Details (Optional)",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
                                       ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: colorScheme.primary,
-                                        side: BorderSide(
-                                          color: colorScheme.primary,
-                                          width: 1.3,
+                                    ),
+
+                                    const SizedBox(height: 12),
+
+                                    ...List.generate(
+                                      itemInputs.length,
+                                      (index) => _buildItemFields(index),
+                                    ),
+
+                                    const SizedBox(height: 12),
+
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 48,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _addItem,
+                                        icon: const Icon(Icons.add),
+                                        label: const Text(
+                                          "Add Another Item",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            30,
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: colorScheme.primary,
+                                          side: BorderSide(
+                                            color: colorScheme.primary,
+                                            width: 1.3,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              30,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                        ],
+                      ),
 
                       const SizedBox(height: 6),
 
@@ -1431,9 +1520,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
   void dispose() {
     _shopController.dispose();
     _travelModeController.dispose();
+    _amountController.dispose();
     _travelStartController.dispose();
     _travelDestController.dispose();
-    _travelAmountController.dispose();
+
     _shopFocus.dispose();
 
     _scrollController.dispose();

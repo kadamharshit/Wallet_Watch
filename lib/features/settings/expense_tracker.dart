@@ -205,10 +205,7 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
     final itemsRaw = (expense['items'] ?? '').toString().trim();
     final isTravel = (expense['category'] ?? '').toString() == 'Travel';
 
-    final headers = isTravel
-        ? ['Mode', 'From', 'To', 'Amount']
-        : ['Item', 'Qty', 'Unit', 'Amount'];
-
+    final headers = isTravel ? ['Mode', 'From', 'To'] : ['Item', 'Qty', 'Unit'];
     List<Map<String, dynamic>> parsedItems = [];
 
     if (itemsRaw.isNotEmpty) {
@@ -341,12 +338,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                         Expanded(child: Text(mode)),
                                         Expanded(child: Text(start)),
                                         Expanded(child: Text(dest)),
-                                        Expanded(
-                                          child: Text(
-                                            "₹${amt.toStringAsFixed(2)}",
-                                            textAlign: TextAlign.right,
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   );
@@ -382,12 +373,6 @@ class _ExpenseTrackerState extends State<ExpenseTracker> {
                                         Expanded(child: Text(name)),
                                         Expanded(child: Text(qty)),
                                         Expanded(child: Text(unit)),
-                                        Expanded(
-                                          child: Text(
-                                            "₹${amt.toStringAsFixed(2)}",
-                                            textAlign: TextAlign.right,
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   );
