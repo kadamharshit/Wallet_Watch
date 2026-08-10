@@ -1197,36 +1197,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                           ),
                         ),
                       ),
-                      if (_selectedCategory == 'Travel')
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          child: Showcase(
-                            key: _itemsKey,
-                            description:
-                                "Travel details are required: select transport mode, start and destination.",
-                            child: _sectionContainer(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Trip Details",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  _buildItemFields(0),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-
                       if (_selectedCategory == 'Travel' &&
                           _recentTravels.isNotEmpty)
                         _sectionContainer(
@@ -1352,6 +1322,36 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                             ),
                           ),
                         ),
+                      if (_selectedCategory == 'Travel')
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Showcase(
+                            key: _itemsKey,
+                            description:
+                                "Travel details are required: select transport mode, start and destination.",
+                            child: _sectionContainer(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Trip Details",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 12),
+
+                                  _buildItemFields(0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
                       ExpansionTile(
                         title: const Text(
                           "Add More Details",
