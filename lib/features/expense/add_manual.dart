@@ -226,7 +226,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
     ShowCaseWidget.of(
       context,
-    ).startShowCase([_dateKey, _categoryKey, _paymentKey, _shopKey, _saveKey]);
+    ).startShowCase([_categoryKey, _paymentKey, _shopKey, _saveKey]);
 
     await _secureStorage.write(key: _addExpenseTourDoneKey, value: "true");
   }
@@ -355,6 +355,18 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     }
   }
 
+  void _scrollToSaveButton() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (!mounted) return;
+
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   // Future<void> _loadRecentTravels() async {
   //   final data = await DatabaseHelper.instance.getRecentTravelExpenses(
   //     limit: 5,
@@ -398,6 +410,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           ];
 
           total = 0.0;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _scrollToSaveButton();
         });
       }
     } catch (e) {}
@@ -451,10 +467,6 @@ class _AddManualExpenseState extends State<AddManualExpense> {
     final supabase = Supabase.instance.client;
     final user = supabase.auth.currentUser;
     if (user == null) {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Please log in again")));
@@ -545,14 +557,18 @@ class _AddManualExpenseState extends State<AddManualExpense> {
           'synced': 1,
         });
       } catch (e) {
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
-        }
+        // Local save remains. It can be synced later.
       }
     }
+
+    // Always reset saving state.
+    if (mounted) {
+      setState(() {
+        _isSaving = false;
+      });
+    }
+
+    if (!mounted) return;
 
     ScaffoldMessenger.of(
       context,
@@ -711,7 +727,11 @@ class _AddManualExpenseState extends State<AddManualExpense> {
             TextFormField(
               controller: _travelDestController,
               textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                FocusScope.of(context).unfocus();
+                _scrollToSaveButton();
+              },
               decoration: _pillDecoration(
                 hint: "Destination",
                 icon: Icons.flag_outlined,
@@ -766,8 +786,22 @@ class _AddManualExpenseState extends State<AddManualExpense> {
 
                 setState(() {});
               },
-              validator: (val) =>
-                  val == null || val.isEmpty ? 'Enter item name' : null,
+              validator: (val) {
+                final name = val?.trim() ?? '';
+                final qty = (item['qty'] ?? '').toString().trim();
+
+                // Both empty = item details were not entered, which is allowed.
+                if (name.isEmpty && qty.isEmpty) {
+                  return null;
+                }
+
+                // Quantity was entered, so item name is required.
+                if (name.isEmpty) {
+                  return 'Enter item name';
+                }
+
+                return null;
+              },
             ),
             const SizedBox(height: 10),
             Row(
@@ -786,10 +820,22 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                     initialValue: item['qty']?.toString(),
                     onChanged: (val) => item['qty'] = val,
                     validator: (val) {
-                      final qty = double.tryParse(val ?? "");
+                      final qtyText = val?.trim() ?? '';
+                      final name = (item['name'] ?? '').toString().trim();
+
+                      // Both empty = item details were not entered, which is allowed.
+                      if (qtyText.isEmpty && name.isEmpty) {
+                        return null;
+                      }
+
+                      final qty = double.tryParse(qtyText);
+
+                      // Item name entered but quantity is missing/invalid.
                       if (qty == null || qty <= 0) {
                         return "Qty must be greater than 0";
                       }
+
+                      return null;
                     },
                   ),
                 ),
@@ -1128,12 +1174,15 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                               const SizedBox(height: 10),
                               TextFormField(
                                 controller: _shopController,
+
                                 focusNode: _shopFocus,
-                                onFieldSubmitted: (_) {
-                                  FocusScope.of(context).nextFocus();
-                                },
+
                                 textCapitalization: TextCapitalization.words,
-                                textInputAction: TextInputAction.next,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) {
+                                  FocusScope.of(context).unfocus();
+                                  _scrollToSaveButton();
+                                },
 
                                 decoration: _pillDecoration(
                                   hint: _selectedCategory == 'Travel'
@@ -1177,6 +1226,7 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                         setState(() {
                                           _shopController.text = shop;
                                         });
+                                        _scrollToSaveButton();
                                       },
                                     );
                                   }).toList(),
@@ -1247,7 +1297,10 @@ class _AddManualExpenseState extends State<AddManualExpense> {
                                         : Colors.green;
 
                                     return GestureDetector(
-                                      onTap: () => _applyTravelTemplate(exp),
+                                      onTap: () {
+                                        _applyTravelTemplate(exp);
+                                      },
+
                                       child: Container(
                                         width: 220,
                                         margin: const EdgeInsets.only(
