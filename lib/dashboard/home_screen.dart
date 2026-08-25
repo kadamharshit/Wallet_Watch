@@ -599,18 +599,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildNoBudgetCard(),
                             )
                           else ...[
+                            _buildBottomButtons(),
+                            //const SizedBox(height: 8),
                             _buildTotalRemainingCard(),
 
-                            const SizedBox(height: 8),
-
+                            //const SizedBox(height: 8),
                             _buildPieCard(),
 
                             _buildRemainingRow(),
                           ],
 
                           const SizedBox(height: 8),
-
-                          _buildBottomButtons(),
 
                           const SizedBox(height: 18),
                         ],
@@ -857,6 +856,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
+            // ---------------- ADD EXPENSE ----------------
             Showcase(
               key: _addExpenseKey,
               description: "Tap here to add a new expense ➕",
@@ -883,93 +883,91 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Showcase(
-              key: _addBudgetKey,
-              description: "Tap here to add your monthly budget 💳",
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.account_balance_wallet),
-                  label: const Text(
-                    "Add Budget",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.surface,
-                    foregroundColor: colorScheme.primary,
-                    elevation: 0,
-                    side: BorderSide(color: colorScheme.primary, width: 1.4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  onPressed: () async {
-                    await Navigator.pushNamed(context, '/budget');
-                    await _refreshAll();
-                  },
-                ),
-              ),
-            ),
-            if (_cashBudget > 0 || _onlineBudget > 0) ...[
-              const SizedBox(height: 12),
 
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.sync_alt),
-                  label: const Text(
-                    "Transfer",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.surface,
-                    foregroundColor: colorScheme.primary,
-                    elevation: 0,
-                    side: BorderSide(color: colorScheme.primary, width: 1.4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => TransferScreen(
-                          cashBalance: _cashRemaining,
-                          onlineBalance: _onlineRemaining,
+            const SizedBox(height: 12),
+
+            // ---------------- BUDGET + TRANSFER ----------------
+            if (_cashBudget > 0 || _onlineBudget > 0)
+              Row(
+                children: [
+                  // ADD BUDGET
+                  Expanded(
+                    child: Showcase(
+                      key: _addBudgetKey,
+                      description: "Tap here to add your monthly budget 💳",
+                      child: SizedBox(
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.account_balance_wallet),
+                          label: const Text(
+                            "Add Budget",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.surface,
+                            foregroundColor: colorScheme.primary,
+                            elevation: 0,
+                            side: BorderSide(
+                              color: colorScheme.primary,
+                              width: 1.4,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          onPressed: () async {
+                            await Navigator.pushNamed(context, '/budget');
+                            await _refreshAll();
+                          },
                         ),
                       ),
-                    );
+                    ),
+                  ),
 
-                    if (result == true) {
-                      await _refreshAll();
-                    }
-                  },
-                ),
+                  const SizedBox(width: 10),
+
+                  // TRANSFER
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.sync_alt),
+                        label: const Text(
+                          "Transfer",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.surface,
+                          foregroundColor: colorScheme.primary,
+                          elevation: 0,
+                          side: BorderSide(
+                            color: colorScheme.primary,
+                            width: 1.4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => TransferScreen(
+                                cashBalance: _cashRemaining,
+                                onlineBalance: _onlineRemaining,
+                              ),
+                            ),
+                          );
+
+                          if (result == true) {
+                            await _refreshAll();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-
-            // ElevatedButton(
-            //   onPressed: () async {
-            //     final result = await Navigator.push(
-            //       context,
-            //       MaterialPageRoute(
-            //         builder: (_) => TransferScreen(
-            //           cashBalance: _cashRemaining,
-            //           onlineBalance: _onlineRemaining,
-            //         ),
-            //       ),
-            //     );
-
-            //     if (result == true) {
-            //       await _loadBudgetsSeparately();
-            //     }
-            //   },
-            //   child: Text("Test Transfer"),
-            // ),
           ],
         ),
       ),
@@ -996,6 +994,11 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          _skeletonBox(height: 52),
+          const SizedBox(height: 12),
+          _skeletonBox(height: 52),
+          const SizedBox(height: 12),
+
           _skeletonBox(height: 110),
           const SizedBox(height: 16),
 
@@ -1010,11 +1013,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          const SizedBox(height: 16),
-
-          _skeletonBox(height: 52),
-          const SizedBox(height: 12),
-          _skeletonBox(height: 52),
+          // const SizedBox(height: 16),
         ],
       ),
     );
@@ -1246,7 +1245,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(title),
           const Spacer(),
           Text(
-            "${amount >= 0 ? '+' : '-'}₹${amount.abs().toStringAsFixed(2)}",
+            hideAmount(
+              "${amount >= 0 ? '+' : '-'}₹${amount.abs().toStringAsFixed(2)}",
+            ),
             style: TextStyle(
               color: color,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
